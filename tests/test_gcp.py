@@ -31,7 +31,7 @@ class TestCallStageViaPubSub(unittest.TestCase):
 
     test_plan_description = {
         "name": "test",
-        "plans": [
+        "stages": [
             {"name": "start", "downstream": ["end"], "params": {"table": "test.sql"}},
             {"name": "end", "params": {"table": "test.sql", "psq": "tp-test-end"}},
         ],
@@ -57,8 +57,32 @@ class TestCallStageViaPubSub(unittest.TestCase):
                 response = houston.end_stage("start", "test-launch-id")
                 pubsub_client.return_value = MockPubSubResponse
                 houston.project = "test-gcp-project"
-                houston.topic = "test-gcp-topic"
                 houston.call_stage_via_pubsub(response, "test-launch-id")
+
+    def test_pubsub_trigger(self):
+        with mock.patch(
+            "houston.plugin.gcp.pubsub_v1.PublisherClient"
+        ) as pubsub_client:
+            with mock.patch("houston.interface.requests.request") as http:
+                http.return_value = MockResponse(
+                    status_code=200,
+                    json_data={
+                        "success": True,
+                        "complete": False,
+                        "next": ["end"],
+                        "params": {"end": {"table": "test.sql", "psq": "tp-test-end"}},
+                    },
+                )
+                houston = GCPHouston(
+                    api_key="test-key", plan=self.test_plan_description
+                )
+                response = houston.end_stage("start", "test-launch-id")
+                pubsub_client.return_value = MockPubSubResponse
+                houston.project = "test-gcp-project"
+
+                for next_stage in response['next']:
+                    topic = houston.get_params(next_stage)['psq']
+                    houston.pubsub_trigger({'stage': next_stage, 'mission_id': "test-launch-id"}, topic)
 
 
 if __name__ == "__main__":

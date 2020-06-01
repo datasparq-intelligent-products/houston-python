@@ -88,6 +88,16 @@ class TestStage(unittest.TestCase):
             houston = Houston(api_key="test", plan=self.test_plan_description)
             houston.start_stage("test", "launch-id")
 
+    def test_get_params(self):
+        houston = Houston(api_key="test", plan=self.test_plan_description)
+
+        params = houston.get_params("start")
+        self.assertEqual(params['table'], "test.sql")
+        self.assertIs(params['notaparam'], None)
+
+        not_params = houston.get_params("notastage")
+        self.assertIs(not_params, None)
+
 
 if __name__ == "__main__":
     unittest.main()

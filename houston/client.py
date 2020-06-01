@@ -3,6 +3,7 @@ import os
 
 from houston.exceptions import HoustonClientError, HoustonException
 from houston.interface import InterfaceRequest
+from collections import defaultdict
 
 try:
     basestring
@@ -132,3 +133,72 @@ class Houston:
         )
 
         return json_response
+
+    def fail_stage(self, stage_name, mission_id, retry=3):
+        """Marks a Houston stage as failed, which allows it to be started again, returns downstream stages and available
+        parameters
+
+        :param string stage_name: name of stage which has failed
+        :param string mission_id: unique identifier of mission currently being completed
+        :param int retry: number of retry attempts
+        :returns dict: Houston response {"next": list(string), "complete": bool, "params": dict(stage_name: dict())}
+                       params contains multiple stage's parameters stored by stage name as keys
+                       (e.g. {"next": "stage-two", "complete": False, "params": {"stage-two": dict()}})
+        """
+
+        payload = {"state": "failed"}
+        status_code, json_response = self.interface_request.request(
+            "post",
+            uri=self.base_url + "/missions/" + mission_id + "/stages/" + stage_name,
+            data=json.dumps(payload),
+            retry=retry,
+        )
+
+        return json_response
+
+    def ignore_stage(self, stage_name, mission_id, retry=3):
+        """Marks a Houston stage as ignored. See https://callhouston.io/docs#ignored for more information
+
+        :param string stage_name: name of stage which should be ignored
+        :param string mission_id: unique identifier of mission currently being completed
+        :param int retry: number of retry attempts
+        :returns dict: Houston response {"next": list(string), "complete": bool, "params": dict()}
+        """
+
+        payload = {"state": "ignored"}
+        status_code, json_response = self.interface_request.request(
+            "post",
+            uri=self.base_url + "/missions/" + mission_id + "/stages/" + stage_name,
+            data=json.dumps(payload),
+            retry=retry,
+        )
+
+        return json_response
+
+    def get_params(self, stage_name):
+        """Returns the parameters for the provided stage name as defined in the plan. Returns `None` if the stage
+        doesn't exist. Note: The plan used to retrieve parameters is the master version and is not linked to any
+        particular mission ID, it is therefore possible for parameter values returned from this method to differ from
+        those belonging to the current mission.
+
+        :param string stage_name: name of a stage in the plan
+        :return collections.defaultdict: stage parameters as key value pairs
+        """
+
+        filtered_stages = [s for s in self.plan['stages'] if s['name'] == stage_name]
+
+        if len(filtered_stages) < 1:
+            return None
+        elif len(filtered_stages) > 1:
+            raise ValueError("Can't return params because more than one stage in the plan has the name '{}'. "
+                             "Plan is not valid.".format(stage_name))
+
+        this_stage = filtered_stages[0]
+
+        if 'params' in this_stage:
+            params = this_stage['params']
+
+        else:
+            params = dict()
+
+        return defaultdict(lambda: None, params)
