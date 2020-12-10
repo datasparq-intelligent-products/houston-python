@@ -22,9 +22,9 @@ setup(
         "requests[security]>=2.18.0,<3.0.0dev"],
     extras_require={
         "gcp": [
-            "google-cloud-pubsub>=1.2.0"],
+            "google-cloud-pubsub>=1.2.0,<2.0.0"],
         "azure": [
-            "azure-eventgrid>=1.2.0",
-            "azure-mgmt-eventgrid>=2.2.0"]},
+            "azure-eventgrid>=1.2.0,<2.0.0",
+            "azure-mgmt-eventgrid>=2.2.0,<3.0.0"]},
     keywords=["houston"],
 )
