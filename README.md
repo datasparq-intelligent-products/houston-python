@@ -1,6 +1,9 @@
 ![Houston logo](https://storage.googleapis.com/gcs-callhouston-asset/houston-title.png)
 
+![PyPI](https://img.shields.io/pypi/v/houston-client)
+
 Houston Python Client Library (https://callhouston.io), links components to a simple workflow api.
+
 
 ## Installation
 
@@ -12,7 +15,7 @@ pip install houston-client
 
 ## Requirements
 
-- Python 3.7
+- Python >= 3.7
 
 ## Proxy
 
