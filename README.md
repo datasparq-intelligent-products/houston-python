@@ -40,7 +40,7 @@ Now ready, you'll need to initialise the Houston object with both an api_key and
 ```python
 from houston.client import Houston
 
-houston = Houston(api_key="H...", plan="test-plan")
+houston = Houston(api_key="H...", plan="my-plan")
 ```
 
 ### Plan
@@ -52,7 +52,7 @@ This can now be easily saved:
 ```python
 from houston.client import Houston
 
-houston = Houston(api_key="H...", plan=dict())
+houston = Houston(api_key="H...", plan=dict(name="my-plan", stages=[]))
 houston.save_plan()
 ```
 
@@ -61,7 +61,7 @@ To return the plan in dictionary format, enter the plan name as a string:
 ```python
 from houston.client import Houston
 
-houston = Houston(api_key="H...", plan=dict() or str())
+houston = Houston(api_key="H...", plan="my-plan")
 houston.get_plan()
 ```
 
@@ -72,7 +72,7 @@ Note: Extra parameter [safe] available to ignore any invalid responses e.g. 400 
 ```python
 from houston.client import Houston
 
-houston = Houston(api_key="H...", plan=dict())
+houston = Houston(api_key="H...", plan="my-plan")
 houston.delete_plan(safe=True)
 ```
 
@@ -84,7 +84,7 @@ mission UUID.
 ```python
 from houston.client import Houston
 
-houston = Houston(api_key="H...", plan=dict())
+houston = Houston(api_key="H...", plan="my-plan")
 mission_id = houston.create_mission()
 ```
 
@@ -131,13 +131,13 @@ Plugins allow for Houston to easily integrate with external tools
 Google Cloud Pub/Sub plugin publishes Houston responses to Topics, using Pub/Sub as a message bus between subscribing 
 services.
 
-To use this plugin, each stage must have a parameter named "psq" which defines the Pub/Sub Topic the stage service is 
+To use this plugin, each stage must have a parameter named "topic" which defines the Pub/Sub Topic the stage service is 
 listening to. 
 
 Note: stage parameters must NOT include protected keys: "topic" & "data"
 
 Before this plugin can be used, you must first create a Pub/Sub Topic and a Subscribing service which carries out your 
-stage operations. When complete - the function call_stage_via_pubsub can be used to easily trigger downstream 
+stage operations. When complete - the function `pubsub_trigger` can be used to easily trigger downstream 
 stages via Pub/Sub. For example:
 
 ```python
@@ -148,13 +148,15 @@ houston = GCPHouston(api_key="H...", plan="test-plan")
 mission_id = houston.create_mission()
 houston.start_stage("test-stage", mission_id=mission_id)
 
-# perform task, handle errors
+# get stage parameters
+houston.get_params("test-stage")
+
+# (perform task, handle errors)
 
 response = houston.end_stage("test-stage", mission_id=mission_id)
-houston.call_stage_via_pubsub(response, mission_id=mission_id)
+for stage in response['next']:
+    houston.pubsub_trigger({"stage": stage, "mission_id": mission_id})
 ```
-
-Stage information and parameters are encoded via both the message body & attributes:
 
 #### Message Body
 
@@ -180,23 +182,4 @@ def main(event, context):
     """
     houston = GCPHouston(api_key="H...", plan="test-plan")
     houston.extract_stage_information(event["data"])
-```
-
-
-### Message Attributes
-
-The message attributes contain the key: value pairs of the parameters of the stage (JSON encoded). They can be loaded 
-via the event attributes: 
-
-```python
-import json
-
-def main(event, context):
-    """Triggered from a message on a Cloud Pub/Sub topic. Calls Houston to start stage named in event payload, executes
-    task function, calls Houston to finish stage.
-
-    :param dict event: Event payload - expected to contain Houston 'stage' and 'mission_id'.
-    :param google.cloud.functions.Context context: Metadata for the event.
-    """
-    parameters = json.loads(event["attributes"])
 ```

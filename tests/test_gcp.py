@@ -57,7 +57,7 @@ class TestCallStageViaPubSub(unittest.TestCase):
                 response = houston.end_stage("start", "test-launch-id")
                 pubsub_client.return_value = MockPubSubResponse
                 houston.project = "test-gcp-project"
-                houston.call_stage_via_pubsub(response, "test-launch-id")
+                houston.trigger_all(response['next'], "test-launch-id")
 
     def test_pubsub_trigger(self):
         with mock.patch(

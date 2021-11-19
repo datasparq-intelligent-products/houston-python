@@ -14,7 +14,7 @@ class InterfaceRequest:
     def __init__(self, key):
         self.headers = {"x-access-key": key, "Content-Type": "application/json"}
 
-    def request(self, method, uri, params=None, data=None, retry=3, safe=False):
+    def request(self, method, uri, params=None, data=None, retry=3, safe=False, fire_and_forget=False):
         """
         Request a Houston resource
 
@@ -24,12 +24,23 @@ class InterfaceRequest:
         :param dict data: Parameters to be sent with request (will be form encoded)
         :param int retry: Number of retry's to attempt with request (only used by 429 server responses)
         :param bool safe: Do not raise errors in-case of client error
+        :param bool fire_and_forget: If true, do not wait for a response
         :return: HTTP response code and response payload parsed as dict
         """
 
-        response = requests.request(
-            method, uri, headers=self.headers, params=params, data=data
-        )
+        timeout = None
+        if fire_and_forget:
+            timeout = 1
+
+        try:
+            response = requests.request(
+                method, uri, headers=self.headers, params=params, data=data, timeout=timeout,
+            )
+        except requests.exceptions.ReadTimeout:
+            if fire_and_forget:
+                return 200, dict()
+            else:
+                raise
 
         # retry if server busy - this can be common in a large workflow due to operations being immutable. 572 is the
         # Houston API's code for DagLockedError. 429 is 'Too Many Requests'.

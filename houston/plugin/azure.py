@@ -19,17 +19,29 @@ Recommended usage:
 """
 
 from houston.client import Houston
+from houston.exceptions import HoustonServerError, HoustonServerBusy
 from datetime import datetime, timezone
 from azure.eventgrid import EventGridClient
 from msrest.authentication import TopicCredentials
 from msrest.exceptions import HttpOperationError
+from retry import retry
 import uuid
-import time
+
+
+retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError, HttpOperationError), tries=3, delay=1, backoff=100)
+
+
+@retry_wrapper
+def event_grid_trigger(client, data, topic, topic_key):
+    if 'plan' not in data:
+        data['plan'] = client.plan['name']
+
+    publish_event_grid_event(data, topic, topic_key)
 
 
 class AzureHouston(Houston):
 
-    def event_grid_trigger(self, data, topic, topic_key, retry=3):
+    def event_grid_trigger(self, data, topic, topic_key):
         """Sends a message to the provided Event Grid topic with the provided data payload.
 
         :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
@@ -37,20 +49,7 @@ class AzureHouston(Houston):
         :param string topic: The host name of the topic, e.g. 'topic1.westus2-1.eventgrid.azure.net'
         :param string topic_key: A 44 character access key for the topic.
         """
-        if 'plan' not in data:
-            data['plan'] = self.plan['name']
-
-        try:
-            publish_event_grid_event(data, topic, topic_key)
-
-        except HttpOperationError as e:
-            # retry for azure errors
-            if e.response.status_code >= 500:
-                if retry > 0:
-                    time.sleep(0.5)
-                    self.event_grid_trigger(data, topic, topic_key, retry - 1)
-            else:
-                raise e
+        event_grid_trigger(self, data, topic, topic_key)
 
 
 def publish_event_grid_event(data, topic_hostname, topic_key):

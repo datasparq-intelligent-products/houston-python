@@ -1,40 +1,49 @@
 import json
 import os
-
-from houston.exceptions import HoustonClientError, HoustonException
-from houston.interface import InterfaceRequest
+import logging
 from collections import defaultdict
+from typing import Union, List
+import urllib.parse
+from retry import retry
+from houston.exceptions import HoustonClientError, HoustonException, HoustonServerBusy, \
+                               HoustonServerError, HoustonPlanNotFound
+from houston.interface import InterfaceRequest
 
-try:
-    basestring
-except NameError:
-    basestring = str
+
+HOUSTON_BASE_URL = os.getenv("HOUSTON_BASE_URL", "https://callhouston.io/api/v1")
+
+retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError), tries=3, delay=1, backoff=100)
+log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
 
 
 class Houston:
-    def __init__(self, plan, api_key=None):
+
+    def __init__(self, plan: Union[dict, str], api_key: str = None):
         """
         :param plan: Can be either:
                         - string: name of an existing plan to be loaded
                         - dict: plan definition, see Plan docs for example
                         If a plan definition is provided, ensure it is loaded with load_plan to make it
                         available to other instances
-        :param string api_key: Api key provided from https://callhouston.io, see account information. Can also be set as
+        :param api_key: Api key provided from https://callhouston.io, see account information. Can also be set as
                         environment variable HOUSTON_KEY
         """
         if api_key is None:
-            api_key = os.getenv("HOUSTON_KEY", None)
+            api_key = self._find_api_key()
+
         if api_key is None:
-            raise ValueError(
-                "No API key was found. Provide 'api_key' parameter or set the "
-                "HOUSTON_KEY environment variable."
-            )
+            raise ValueError("No API key was found. Provide 'api_key' parameter or set the 'HOUSTON_KEY' environment "
+                             "variable.")
+
         self.key = api_key
         self.interface_request = InterfaceRequest(key=api_key)
-        self.base_url = "https://callhouston.io/api/v1"
+        self.base_url = HOUSTON_BASE_URL
 
         if isinstance(plan, str):
-            self.plan = self.get_plan(plan)
+            try:
+                self.plan = self.get_plan(plan)  # look for existing saved plan
+            except HoustonClientError:
+                self.plan = self.import_plan(plan)  # look for file containing plan
         else:
             self.plan = plan
 
@@ -43,12 +52,63 @@ class Houston:
                 "Sorry, this plan is not formatted correctly - must contain a name"
             )
 
+    @staticmethod
+    def _find_api_key() -> str:
+        """Attempt to load the Houston API key from the environment.
+        """
+        return os.getenv("HOUSTON_KEY", None)
+
+    @staticmethod
+    def load_plan(path) -> str:
+        """Load plan from a file.
+        """
+        try:
+            with open(path) as f:
+                plan = f.read()
+            return plan
+
+        except FileNotFoundError:
+            raise HoustonPlanNotFound(f"No existing plans or plan files were found for '{path}'.")
+
+    @classmethod
+    def import_plan(cls, path: str) -> dict:
+
+        plan = cls.load_plan(path)
+
+        if ".yaml" in path or ".yml" in path:
+            import yaml
+            try:
+                plan = yaml.load(plan, Loader=yaml.SafeLoader)
+            except yaml.YAMLError as e:
+                log.error(f"Plan has .yaml file extension but is not valid YAML")
+                raise e
+
+        else:  # assume plan is json
+            try:
+                plan = json.loads(plan)
+            except json.JSONDecodeError as e:
+                log.error("Plan is not valid JSON")
+                raise e
+
+        # convert any stage parameters to json strings if they are objects
+        if not isinstance(plan, str):
+            if 'stages' in plan:
+                for i, stage in enumerate(plan['stages']):
+                    if 'params' in stage:
+                        for param in stage['params']:
+                            if isinstance(stage['params'][param], dict) or isinstance(stage['params'][param], list):
+                                plan['stages'][i]['params'][param] = json.dumps(stage['params'][param])
+
+        return plan
+
+    @retry_wrapper
     def save_plan(self):
         """Sends selected plan to Houston server"""
         self.interface_request.request(
             method="post", uri=self.base_url + "/plans", data=json.dumps(self.plan)
         )
 
+    @retry_wrapper
     def delete_plan(self, safe=False):
         """Removes selected plan from Houston server
 
@@ -59,6 +119,7 @@ class Houston:
             "delete", uri=self.base_url + "/plans/" + plan_name, safe=safe
         )
 
+    @retry_wrapper
     def get_plan(self, plan_name=None):
         """Get saved plan detail from Houston server
 
@@ -73,6 +134,7 @@ class Houston:
         )
         return response
 
+    @retry_wrapper
     def create_mission(self):
         """Creates a new instance of a mission
         :return string: new mission instance id or False if error
@@ -89,6 +151,7 @@ class Houston:
 
         return response["id"]
 
+    @retry_wrapper
     def start_stage(self, stage_name, mission_id, retry=3, ignore_dependencies=False):
         """Starts Houston stage, returns current stage parameters if available
 
@@ -111,6 +174,7 @@ class Houston:
 
         return json_response
 
+    @retry_wrapper
     def end_stage(self, stage_name, mission_id, retry=3, ignore_dependencies=False):
         """Ends a Houston stage, returns downstream stages and available parameters
 
@@ -134,6 +198,7 @@ class Houston:
 
         return json_response
 
+    @retry_wrapper
     def fail_stage(self, stage_name, mission_id, retry=3):
         """Marks a Houston stage as failed, which allows it to be started again, returns downstream stages and available
         parameters
@@ -156,6 +221,7 @@ class Houston:
 
         return json_response
 
+    @retry_wrapper
     def ignore_stage(self, stage_name, mission_id, retry=3):
         """Marks a Houston stage as ignored. See https://callhouston.io/docs#ignored for more information
 
@@ -175,6 +241,7 @@ class Houston:
 
         return json_response
 
+    @retry_wrapper
     def get_params(self, stage_name):
         """Returns the parameters for the provided stage name as defined in the plan. Returns `None` if the stage
         doesn't exist. Note: The plan used to retrieve parameters is the master version and is not linked to any
@@ -202,3 +269,99 @@ class Houston:
             params = dict()
 
         return defaultdict(lambda: None, params)
+
+    @property
+    def independent_stages(self) -> List[dict]:
+        """Find stages in a plan that have no dependencies and should therefore be triggered to start a mission.
+        :return: List of all independent stages
+        """
+        has_dependencies = []
+        for stage in self.plan['stages']:
+            if 'upstream' in stage and len(stage['upstream']) > 0:
+                has_dependencies.append(stage['name'])
+            if 'downstream' in stage:
+                if isinstance(stage['downstream'], str):
+                    has_dependencies.append(stage['downstream'])
+                else:
+                    has_dependencies += stage['downstream']
+
+        return [s for s in self.plan['stages'] if s['name'] not in has_dependencies]
+
+    def _validate_message_data(self, data) -> (dict, dict):
+
+        stage = data.get("stage")
+        if stage is None:
+            raise ValueError("Triggering message data does not contain 'stage'.")
+        if not isinstance(stage, str):
+            raise ValueError(f"Triggering message has an invalid value for 'stage'. Expected string, got '{stage}'")
+
+        params = self.get_params(stage)
+        if params is None:
+            raise ValueError(f"Stage '{stage}' has no params. Cannot trigger a stage without the relevant params.")
+
+        if 'plan' not in data:
+            data['plan'] = self.plan['name']
+
+        return data, params
+
+    @retry_wrapper
+    def http_trigger(self, data: dict):
+        """Trigger a stage of the plan via HTTP GET request. The contents of `data` will be passed as URL query
+        parameters. A stage must contain a param called 'service_endpoint' or 'endpoint' with a valid http address to be
+        able to use this method. The request will be made without waiting for the result to ensure that the process that
+        makes the request can end without the next stage needing to finish.
+        :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
+                          additional JSON serializable information.
+        """
+        data, params = self._validate_message_data(data)
+
+        endpoint = params.get('endpoint', params.get('service_endpoint'))
+
+        query = urllib.parse.urlencode(data, doseq=False)  # convert content to url query
+
+        self.interface_request.request(
+            "GET",
+            uri=f"{endpoint}?{query}",
+            data=json.dumps(data),
+            fire_and_forget=True,
+        )
+
+    def trigger(self, data: dict):
+        """Trigger a stage using the first available method based on the stage params.
+        :param data: event data to be sent to each stage's service to trigger the stage. Should contain the name of the
+                     stage and mission ID.
+        """
+        data, params = self._validate_message_data(data)
+
+        if 'topic' in params and 'topic_key' in params:
+            try:
+                from houston.azure import event_grid_trigger
+                event_grid_trigger(self, data, params['topic'], params['topic_key'])
+            except ImportError:
+                raise ImportError(f"Cannot use Event Grid trigger because Azure plugin is not installed."
+                                  f"Use: `pip install houston-client[azure]`")
+
+        elif any([p in params for p in ('psq', 'topic')]):
+            try:
+                from houston.gcp import pubsub_trigger
+                pubsub_trigger(self, data)
+            except ImportError:
+                raise ImportError(f"Cannot use Pub/Sub to trigger stage because GCP plugin is not installed. "
+                                  f"Use: `pip install houston-client[gcp]`")
+
+        else:
+            raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the "
+                             "stage parameters. See docs: ")  # TODO: docs link
+
+    def trigger_all(self, stages: List[str], mission_id: str,
+                    ignore_dependencies: bool = False, ignore_dependants: bool = False, **kwargs):
+        """Trigger multiple stages from a list of stage names. Triggering event data will be automatically generated.
+        Any other keyword arguments provided will be sent to all stages.
+        :param stages: list of stage names
+        :param mission_id: unique identifier of mission currently being completed
+        :param ignore_dependencies: If true, all stages will be triggered with instructions to ignore upstream dependencies
+        :param ignore_dependants: If true, all stages will be triggered with instructions to upstream downstream stages
+        """
+        for stage in stages:
+            self.trigger(dict(stage=stage, mission_id=mission_id, plan=self.plan['name'],
+                              ignore_dependencies=ignore_dependencies, ignore_dependants=ignore_dependants, **kwargs))
