@@ -27,26 +27,34 @@ def pubsub_trigger(client: Houston, data: dict, topic=None):
     if hasattr(client, 'project'):
         project = client.project
     else:
-        project = os.getenv("GCP_PROJECT", None)
-
-    if project is None:
-        raise ValueError(
-            "Project is not set. Use GCPHouston.project = '[PROJECT]' "
-            "or set 'GCP_PROJECT' environment variable"
-        )
+        project = os.getenv("GCP_PROJECT", os.getenv("PROJECT_ID", None))
 
     data, stage_params = client._validate_message_data(data)
 
+    service = client.get_service_from_stage_name(data['stage'])
+
+    if service is not None and service.get('trigger') is not None and service.get('trigger').get('project'):
+        project = service.get('trigger').get('project')
+
+    if project is None:
+        raise ValueError(
+            "Project is not set. Specify a 'project' in the service's trigger, "
+            "or use GCPHouston.project = 'your-project-id', "
+            "or set 'GCP_PROJECT' environment variable"
+        )
+
     # try to find the topic name in the stage parameters
     if topic is None:
-        if stage_params:
+        if service is not None and 'trigger' in service:
+            topic = service['trigger'].get('topic')
+        elif stage_params:
             if stage_params['topic']:
                 topic = stage_params['topic']
             elif stage_params['psq']:
                 topic = stage_params['psq']
 
         if topic is None:
-            raise ValueError("Pub/Sub could not be determined. It can either be provided as an argument to "
+            raise ValueError("Pub/Sub topic name could not be determined. It can either be provided as an argument to "
                              "pubsub_trigger, or be a stage parameter with name 'topic' or 'psq'")
 
     future = publisher_client.publish(topic=f"projects/{project}/topics/{topic}", data=json.dumps(data).encode("utf-8"))
@@ -60,7 +68,7 @@ class GCPHouston(Houston):
 
     @staticmethod
     def load_plan(path):
-        if len(path) > 4 and path[:5] == "gs://":  # download plan from cloud storage TODO: document
+        if len(path) > 4 and path[:5] == "gs://":  # download plan from cloud storage
             try:
                 return download_file_as_text(path)
             except ValueError:
@@ -68,12 +76,13 @@ class GCPHouston(Houston):
         else:
             return Houston.load_plan(path)
 
-    def _find_api_key(self):
+    def _find_api_key(self) -> str:
         """Attempt to load the Houston API key from the environment or from Google Cloud Secret Manager.
 
         :return:
         """
         api_key = Houston._find_api_key()
+
         if api_key is None:
             # attempt to find the API key stored in Google Secret Manager
             try:
@@ -82,6 +91,7 @@ class GCPHouston(Houston):
                 raise ValueError("Houston API key could not be found in 'HOUSTON_KEY' environment variable and could "
                                  "not be loaded from Google Cloud Secret Manager.")
             # TODO: See the docs for alternative ways of supplying the API key: https://callhouston.io/docs/  # TODO: create docs and link to them here
+        return api_key
 
     def pubsub_trigger(self, data, topic=None):
         """Sends a message to the provided Pub/Sub topic with the provided data payload.

@@ -32,9 +32,24 @@ retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError, HttpOpera
 
 
 @retry_wrapper
-def event_grid_trigger(client, data, topic, topic_key):
+def event_grid_trigger(client, data):
     if 'plan' not in data:
         data['plan'] = client.plan['name']
+
+    # TODO: get topic from key vault
+
+    stage = data.get('stage')
+    if stage is None:
+        raise ValueError("Cannot trigger stage: A stage name was not provided.")
+
+    service = client.get_service_from_stage_name(stage)
+    if service is None:
+        raise ValueError(f"Cannot trigger stage '{stage}': no service is defined for this stage. "
+                         f"See https://callhouston.io/docs#services.")
+
+    trigger = service.get('trigger')
+    topic = trigger.get('topic')
+    topic_key = trigger.get('topic_key')
 
     publish_event_grid_event(data, topic, topic_key)
 

@@ -2,10 +2,13 @@
 
 import time
 from random import random
-
+import logging
 import requests
+import os
 
 from houston.exceptions import HoustonServerBusy, HoustonClientError, HoustonServerError
+
+log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
 
 
 class InterfaceRequest:

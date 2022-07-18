@@ -37,7 +37,9 @@ def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION
     using a Pub/Sub trigger. Example usage:
 
         # main.py
+
         from houston.gcp.cloud_function import service
+
         @service(name="My Service")
         def main(param_1, param_2):
             print("hello")

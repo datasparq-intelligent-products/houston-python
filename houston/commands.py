@@ -60,15 +60,15 @@ def init_client(func):
 @init_client
 def start(plan: str, client: Houston, stages: Union[str, List[str]] = None, ignore: Union[str, List[str]] = None,
           stage=None, **kwargs) -> bool:
-    """Create new mission ID and trigger the first stages or the requested stages. If the requested stages are not the
-    first stages their upstream dependencies will be ignored.
+    """Start a new mission. Creates a new mission ID and then trigger the first stages or the requested stages.
+    If the requested stages are not the first stages their upstream dependencies will be ignored.
     """
 
     mission_id = client.create_mission()
 
     if ignore is not None:
         if isinstance(ignore, str):
-            ignore = [ignore]
+            ignore = [a.strip() for a in ignore.split(",")]
         for s in ignore:
             try:
                 client.ignore_stage(s, mission_id)
@@ -78,31 +78,30 @@ def start(plan: str, client: Houston, stages: Union[str, List[str]] = None, igno
     if stages is not None or stage is not None:
         starting_stages = stages if stages is not None else stage
         if isinstance(starting_stages, str):
-            starting_stages = [starting_stages]
+            starting_stages = [a.strip() for a in starting_stages.split(",")]
     else:  # if not stages - determine first stages
         starting_stages = [s['name'] for s in client.independent_stages]
 
-    log.info(f"Starting new mission with stage{'s' if len(starting_stages) != 1 else ''}: {starting_stages}.")
-
     # trigger with dependencies ignored
     client.trigger_all(starting_stages, mission_id=mission_id, ignore_dependencies=True)
+
+    log.info(f"Started new mission with stage{'s' if len(starting_stages) != 1 else ''}: {starting_stages}.")
     return True  # end
 
 
 @init_client
 def ignore(plan: str, client: Houston, mission_id: str, stages: Union[str, List[str]] = None,
-           ignore=None, stage=None, **kwargs) -> bool:
+           stage=None, **kwargs) -> bool:
     """Ignore the requested stages. If no stages are specified then every stage will be ignored (essentially stopping
     the mission. note: Houston cannot stop a stage that has already been started).
     """
     if stage is not None:
         stages = stage
-    if ignore is not None:
-        stages = ignore
     if stages is not None:
-        stages = stages if isinstance(stages, list) else [stages]
+        stages = stages if isinstance(stages, list) else [a.strip() for a in stages.split(",")]
     else:
         stages = [s['name'] for s in client.plan['stages']]
+
     for s in stages:
         try:
             client.ignore_stage(s, mission_id)
@@ -114,12 +113,7 @@ def ignore(plan: str, client: Houston, mission_id: str, stages: Union[str, List[
 
 @init_client
 def static_fire(plan: str, client: Houston, stage: str, **kwargs) -> bool:
-    """Run requested stage and in isolation using this service - ignore dependencies and dependants. Example message:
-    {
-        "command": "static-fire",
-        "plan": "apollo",
-        "stage": "main-engine-start"
-    }
+    """Run requested stage and in isolation; ignore dependencies and dependants.
     """
     mission_id = client.create_mission()
 
@@ -133,12 +127,9 @@ def static_fire(plan: str, client: Houston, stage: str, **kwargs) -> bool:
 def save(plan: Union[str, dict], client: Houston, **kwargs) -> bool:
     """Save a plan or update an existing plan.
     """
-    log.info(f"Saving Plan '{client.plan['name']}'.")
     client.delete_plan(safe=True)
-
     client.save_plan()
-    log.info("Plan saved 🚀")
-
+    log.info(f"Saved Plan '{client.plan['name']}' 🚀")
     return True  # end
 
 
@@ -152,13 +143,17 @@ def delete(plan: str, client: Houston, **kwargs) -> bool:
 
 
 @init_client
-def dummy(plan: str, client: Houston, stage: str, mission_id: str, ignore_dependencies: bool = False,
-          ignore_dependants: bool = False,  **kwargs) -> bool:
+def skip(plan: str, client: Houston, stage: str, mission_id: str, stages: Union[str, List[str]] = None,
+         ignore_dependencies: bool = False, ignore_dependants: bool = False,  **kwargs) -> bool:
     """Start and end a stage without doing anything, essentially skipping it.
     """
-    client.start_stage(stage_name=stage, mission_id=mission_id, ignore_dependencies=ignore_dependencies)
-    client.end_stage(stage_name=stage, mission_id=mission_id, ignore_dependencies=ignore_dependants)
-    log.info(f"Marked stage '{stage}' as complete without running it.")
+    stages = stages if stages is not None else stage
+    if isinstance(stages, str):
+        stages = [a.strip() for a in stages.split(",")]
+    for s in stages:
+        client.start_stage(stage_name=s, mission_id=mission_id, ignore_dependencies=ignore_dependencies)
+        client.end_stage(stage_name=s, mission_id=mission_id, ignore_dependencies=ignore_dependants)
+        log.info(f"Marked stage '{s}' as complete without running it.")
     return True  # end
 
 
@@ -169,14 +164,15 @@ def fail(plan: str, client: Houston, mission_id: str, stages: Union[str, List[st
     """
     stages = stages if stages is not None else stage
     if isinstance(stages, str):
-        stages = [stages]
+        stages = [a.strip() for a in stages.split(",")]
     for s in stages:
         try:
             client.fail_stage(s, mission_id)
         except HoustonException:
-            log.warning(f"Failed to fail stage {s}. Stage may not exist.")
+            log.warning(f"Failed to fail stage '{s}'. Stage may not exist.")
             pass
 
+    log.info(f"Marked stages as failed: {', '.join(stages)}")
     return True  # end
 
 
@@ -264,11 +260,25 @@ def wait(plan: str, client: Houston, stage: str, mission_id: str, wait_callback:
         return True  # end
 
 
+@init_client
+def trigger(plan: str, client: Houston, mission_id: str, stages: Union[str, List[str]] = None, stage=None,
+            ignore_dependencies: bool = False, ignore_dependants: bool = False, **kwargs) -> bool:
+    """Manually trigger a stage or stages in an in-progress mission. This should only be us"""
+    stages = stages if stages is not None else stage
+    if isinstance(stages, str):
+        stages = [a.strip() for a in stages.split(",")]
+    for s in stages:
+        client.trigger(dict(stage=s, mission_id=mission_id, ignore_dependencies=ignore_dependencies,
+                            ignore_dependants=ignore_dependants))
+    log.info(f"Triggered stages: {', '.join(stages)}")
+    return True  # end
+
+
 # aliases for some commands
 update = save
 blastoff = start
 scrub = ignore
-skip = dummy
+dummy = skip
 
 
 def run_command(command_name: str, plan: str = None, client: Houston = None, *args, **kwargs) -> bool:
@@ -290,6 +300,7 @@ def run_command(command_name: str, plan: str = None, client: Houston = None, *ar
         skip=skip,
         fail=fail,
         wait=wait,
+        trigger=trigger,
     )
 
     command_name = command_name.replace("-", "").replace("_", "").replace("plan", "")

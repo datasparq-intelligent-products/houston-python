@@ -2,7 +2,7 @@ import json
 import os
 import logging
 from collections import defaultdict
-from typing import Union, List
+from typing import *
 import urllib.parse
 from retry import retry
 from houston.exceptions import HoustonClientError, HoustonException, HoustonServerBusy, \
@@ -241,17 +241,9 @@ class Houston:
 
         return json_response
 
-    @retry_wrapper
-    def get_params(self, stage_name):
-        """Returns the parameters for the provided stage name as defined in the plan. Returns `None` if the stage
-        doesn't exist. Note: The plan used to retrieve parameters is the master version and is not linked to any
-        particular mission ID, it is therefore possible for parameter values returned from this method to differ from
-        those belonging to the current mission.
-
-        :param string stage_name: name of a stage in the plan
-        :return collections.defaultdict: stage parameters as key value pairs
-        """
-
+    def get_stage(self, stage_name: str) -> Optional[dict]:
+        """Returns the full definition of a stage within the plan. Returns `None` if the stage
+        doesn't exist."""
         filtered_stages = [s for s in self.plan['stages'] if s['name'] == stage_name]
 
         if len(filtered_stages) < 1:
@@ -260,7 +252,21 @@ class Houston:
             raise ValueError("Can't return params because more than one stage in the plan has the name '{}'. "
                              "Plan is not valid.".format(stage_name))
 
-        this_stage = filtered_stages[0]
+        return filtered_stages[0]
+
+    def get_params(self, stage_name: str) -> Optional[dict]:
+        """Returns the parameters for the provided stage name as defined in the plan. Returns `None` if the stage
+        doesn't exist. Note: The plan used to retrieve parameters is the latest version and is not linked to any
+        particular mission ID, it is therefore possible for parameter values returned from this method to differ from
+        those belonging to the current mission.
+
+        :param string stage_name: name of a stage in the plan
+        :return collections.defaultdict: stage parameters as key value pairs
+        """
+
+        this_stage = self.get_stage(stage_name)
+        if this_stage is None:
+            return None
 
         if 'params' in this_stage:
             params = this_stage['params']
@@ -269,6 +275,22 @@ class Houston:
             params = dict()
 
         return defaultdict(lambda: None, params)
+
+    def get_service_from_stage_name(self, stage_name: str) -> Optional[dict]:
+        if 'services' not in self.plan:
+            return None
+
+        this_stage = self.get_stage(stage_name)
+        if this_stage is None:
+            return None
+
+        if 'service' in this_stage:
+            filtered_services = [s for s in self.plan['services'] if s['name'] == this_stage['service']]
+            if len(filtered_services) < 1:
+                return None
+            return filtered_services[0]
+        else:
+            return None
 
     @property
     def independent_stages(self) -> List[dict]:
@@ -307,22 +329,29 @@ class Houston:
     @retry_wrapper
     def http_trigger(self, data: dict):
         """Trigger a stage of the plan via HTTP GET request. The contents of `data` will be passed as URL query
-        parameters. A stage must contain a param called 'service_endpoint' or 'endpoint' with a valid http address to be
-        able to use this method. The request will be made without waiting for the result to ensure that the process that
-        makes the request can end without the next stage needing to finish.
+        parameters. The service specified for the stage is expected to have a trigger with method 'http' and a value for
+        'url'. The request will be made without waiting for the result to ensure that the process that makes the request
+        can end without the next stage needing to finish.
         :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
                           additional JSON serializable information.
         """
-        data, params = self._validate_message_data(data)
+        stage = data.get('stage')
+        if stage is None:
+            raise ValueError("Cannot trigger stage: A stage name was not provided.")
 
-        endpoint = params.get('endpoint', params.get('service_endpoint'))
+        service = self.get_service_from_stage_name(stage)
+
+        if service is None:
+            raise ValueError(f"Cannot trigger stage '{stage}': no service is defined for this stage. "
+                             f"See https://callhouston.io/docs#services.")
+
+        url = service.get('trigger').get('url')
 
         query = urllib.parse.urlencode(data, doseq=False)  # convert content to url query
 
         self.interface_request.request(
             "GET",
-            uri=f"{endpoint}?{query}",
-            data=json.dumps(data),
+            uri=f"{url}?{query}",
             fire_and_forget=True,
         )
 
@@ -333,25 +362,40 @@ class Houston:
         """
         data, params = self._validate_message_data(data)
 
-        if 'topic' in params and 'topic_key' in params:
-            try:
-                from houston.azure import event_grid_trigger
-                event_grid_trigger(self, data, params['topic'], params['topic_key'])
-            except ImportError:
-                raise ImportError(f"Cannot use Event Grid trigger because Azure plugin is not installed."
-                                  f"Use: `pip install houston-client[azure]`")
+        # determine how to trigger stage
+        service = self.get_service_from_stage_name(data['stage'])
 
+        if service is not None:
+            trigger_method = service['trigger']['method'].lower()
+        elif 'topic' in params and 'topic_key' in params:
+            trigger_method = 'azure/event-grid'
         elif any([p in params for p in ('psq', 'topic')]):
+            trigger_method = 'google/pubsub'
+        else:
+            raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the "
+                             "stage definition. See docs: callhouston.io/docs#services")
+
+        if trigger_method == 'google/pubsub':
             try:
                 from houston.gcp import pubsub_trigger
                 pubsub_trigger(self, data)
             except ImportError:
                 raise ImportError(f"Cannot use Pub/Sub to trigger stage because GCP plugin is not installed. "
                                   f"Use: `pip install houston-client[gcp]`")
+        elif trigger_method == 'azure/event-grid':
+            try:
+                from houston.plugin.azure import event_grid_trigger
+                event_grid_trigger(self, data)
+            except ImportError:
+                raise ImportError(f"Cannot use Event Grid trigger because Azure plugin is not installed."
+                                  f"Use: `pip install houston-client[azure]`")
+
+        elif trigger_method == "http":
+            self.http_trigger(data)  # TODO: get endpoint from services as well
 
         else:
-            raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the "
-                             "stage parameters. See docs: ")  # TODO: docs link
+            raise ValueError(f"Trigger method '{trigger_method}' is not recognised. "
+                             f"Use one of: http, google/pubsub, azure/event-grid.")
 
     def trigger_all(self, stages: List[str], mission_id: str,
                     ignore_dependencies: bool = False, ignore_dependants: bool = False, **kwargs):
