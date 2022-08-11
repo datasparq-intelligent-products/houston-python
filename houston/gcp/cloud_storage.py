@@ -8,7 +8,7 @@ def download_file_as_text(gs_uri):
     client = storage.Client(project=os.getenv('GCP_PROJECT', os.getenv('PROJECT_ID')))
 
     try:
-        gs_bucket, gs_path = gs_uri.replace("gs://", "").split("/", 2)
+        gs_bucket, gs_path = gs_uri.replace("gs://", "").split("/", 1)
     except ValueError:
         raise ValueError(f"Couldn't download plan; '{gs_uri}' is not a valid Google Storage URI. "
                          f"URI should look like 'gs://my-bucket/path/to/my-plan.yaml")

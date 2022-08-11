@@ -12,7 +12,7 @@ setup(
     description="Houston Python Client",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version="1.2.0b0",
+    version="1.2.0b1",
     url="https://github.com/datasparq-intelligent-products/houston-python",
     author="James Watkinson, Matt Simmons & Ivan Nedjalkov",
     license="MIT",
