@@ -67,8 +67,11 @@ def execute_service(
     #
 
     if 'command' in event:
-        log.info(f"Executing command '{event['command']}'.")
-        if run_command(event['command'], plan=event['plan'], client=h, **event, wait_callback=wait_callback,
+        event_params = dict(**event)
+        command = event_params.pop('command')
+        plan = event_params.pop('plan')
+        log.info(f"Executing command '{command}'.")
+        if run_command(command, plan=plan, client=h, **event_params, wait_callback=wait_callback,
                        start_time=start, time_limit_seconds=time_limit_seconds,
                        wait_interval_seconds=wait_interval_seconds):
             return  # end the cloud function if required for the command

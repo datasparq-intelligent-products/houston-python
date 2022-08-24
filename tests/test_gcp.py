@@ -39,7 +39,7 @@ class TestCallStageViaPubSub(unittest.TestCase):
 
     def test_call_stage_via_pubsub(self):
         with mock.patch(
-            "houston.plugin.gcp.pubsub_v1.PublisherClient"
+            "houston.gcp.client.pubsub_v1.PublisherClient"
         ) as pubsub_client:
             with mock.patch("houston.interface.requests.request") as http:
                 http.return_value = MockResponse(
@@ -61,7 +61,7 @@ class TestCallStageViaPubSub(unittest.TestCase):
 
     def test_pubsub_trigger(self):
         with mock.patch(
-            "houston.plugin.gcp.pubsub_v1.PublisherClient"
+            "houston.gcp.client.pubsub_v1.PublisherClient"
         ) as pubsub_client:
             with mock.patch("houston.interface.requests.request") as http:
                 http.return_value = MockResponse(
