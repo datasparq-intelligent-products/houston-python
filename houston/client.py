@@ -39,6 +39,7 @@ class Houston:
         self.interface_request = InterfaceRequest(key=api_key)
         self.base_url = HOUSTON_BASE_URL
 
+        # TODO: load mission instead of plan
         if isinstance(plan, str):
             try:
                 self.plan = self.get_plan(plan)  # look for existing saved plan
@@ -46,6 +47,8 @@ class Houston:
                 self.plan = self.import_plan(plan)  # look for file containing plan
         else:
             self.plan = plan
+
+        print(self.plan)
 
         if "name" not in self.plan:
             raise HoustonClientError(
@@ -241,6 +244,27 @@ class Houston:
 
         return json_response
 
+    @retry_wrapper
+    def skip_stage(self, stage_name, mission_id, retry=3):
+        """Marks a Houston stage as skipped, meaning the rest of the mission will continue as if that stage doesn't
+        exist.
+
+        :param string stage_name: name of stage which should be ignored
+        :param string mission_id: unique identifier of mission currently being completed
+        :param int retry: number of retry attempts
+        :returns dict: Houston response {"next": list(string), "complete": bool, "params": dict()}
+        """
+
+        payload = {"state": "skipped"}
+        status_code, json_response = self.interface_request.request(
+            "post",
+            uri=self.base_url + "/missions/" + mission_id + "/stages/" + stage_name,
+            data=json.dumps(payload),
+            retry=retry,
+        )
+
+        return json_response
+
     def get_stage(self, stage_name: str) -> Optional[dict]:
         """Returns the full definition of a stage within the plan. Returns `None` if the stage
         doesn't exist."""
@@ -299,9 +323,9 @@ class Houston:
         """
         has_dependencies = []
         for stage in self.plan['stages']:
-            if 'upstream' in stage and len(stage['upstream']) > 0:
+            if 'upstream' in stage and stage['upstream'] is not None and len(stage['upstream']) > 0:
                 has_dependencies.append(stage['name'])
-            if 'downstream' in stage:
+            if 'downstream' in stage and stage['downstream'] is not None:
                 if isinstance(stage['downstream'], str):
                     has_dependencies.append(stage['downstream'])
                 else:
@@ -375,14 +399,14 @@ class Houston:
             raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the "
                              "stage definition. See docs: callhouston.io/docs#services")
 
-        if trigger_method == 'google/pubsub':
+        if trigger_method == 'google/pubsub' or trigger_method == 'pubsub':
             try:
                 from houston.gcp import pubsub_trigger
                 pubsub_trigger(self, data)
             except ImportError:
                 raise ImportError(f"Cannot use Pub/Sub to trigger stage because GCP plugin is not installed. "
                                   f"Use: `pip install houston-client[gcp]`")
-        elif trigger_method == 'azure/event-grid':
+        elif trigger_method == 'azure/event-grid' or trigger_method == 'event-grid' or trigger_method == 'eventgrid':
             try:
                 from houston.plugin.azure import event_grid_trigger
                 event_grid_trigger(self, data)

@@ -17,18 +17,6 @@ pip install houston-client
 
 - Python >= 3.7
 
-## Proxy
-
-Should you need to use a proxy for your Houston requests, please set them as an environment variable:
-
-```bash
-# windows
-set https_proxy=10.0.0.1 
-
-# linux
-export https_proxy=10.0.0.1
-
-```
 
 ## Usage
 
@@ -106,10 +94,10 @@ from houston.client import Houston
 
 houston = Houston(api_key="H...", plan="test-plan")
 mission_id = houston.create_mission()
-houston_start_response = houston.start_stage("test-stage", mission_id=mission_id)
+houston.start_stage("test-stage", mission_id=mission_id)
 
 # Note: only current task parameters returned as dict
-stage_parameters = houston_start_response["params"]
+stage_parameters = houston.get_params("test-stage")
 
 # perform task, handle errors
 
@@ -182,4 +170,16 @@ def main(event, context):
     """
     houston = GCPHouston(api_key="H...", plan="test-plan")
     houston.extract_stage_information(event["data"])
+```
+
+## Proxy
+
+Should you need to use a proxy for your Houston requests, please set them as an environment variable:
+
+```bash
+# windows
+set https_proxy=10.0.0.1 
+
+# linux
+export https_proxy=10.0.0.1
 ```

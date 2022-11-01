@@ -12,7 +12,7 @@ setup(
     description="Houston Python Client",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version="1.2.0b1",
+    version="1.2.0b4",
     url="https://github.com/datasparq-intelligent-products/houston-python",
     author="James Watkinson, Matt Simmons & Ivan Nedjalkov",
     license="MIT",
@@ -26,14 +26,14 @@ setup(
     ],
     extras_require={
         "gcp": [
-            "google-cloud-secret-manager>=2.5,<3",
-            "google-cloud-pubsub>=1.2,<2",
-            "google-cloud-storage>=1.35,<2",
-            "google-cloud-logging>=2,<3",
+            "google-cloud-secret-manager>=2.5",
+            "google-cloud-pubsub>=1.2",
+            "google-cloud-storage>=1.35",
+            "google-cloud-logging>=2",
         ],
         "azure": [
-            "azure-eventgrid>=1.2.0,<2.0.0",
-            "azure-mgmt-eventgrid>=2.2.0,<3.0.0",
+            "azure-eventgrid>=1.2.0",
+            "azure-mgmt-eventgrid>=2.2.0",
         ]
     },
     keywords=["houston"],

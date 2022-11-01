@@ -44,6 +44,10 @@ class InterfaceRequest:
                 return 200, dict()
             else:
                 raise
+        except requests.exceptions.ConnectionError:
+            raise HoustonServerError(
+                f"Unable to connect to Houston API server at url: {uri}. Is your Houston server running?"
+            )
 
         # retry if server busy - this can be common in a large workflow due to operations being immutable. 572 is the
         # Houston API's code for DagLockedError. 429 is 'Too Many Requests'.
