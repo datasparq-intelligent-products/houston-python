@@ -1,7 +1,7 @@
 import json
 import os
 import logging
-from collections import defaultdict
+from string import Template
 from typing import *
 import urllib.parse
 from retry import retry
@@ -14,6 +14,11 @@ HOUSTON_BASE_URL = os.getenv("HOUSTON_BASE_URL", "https://callhouston.io/api/v1"
 
 retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError), tries=3, delay=1, backoff=100)
 log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
+
+
+class PlanTemplate(Template):
+    idpattern = "(?a:unsafe_substitution)"
+    braceidpattern = "(?a:[_a-z][_a-z0-9]*)"
 
 
 class Houston:
@@ -48,8 +53,6 @@ class Houston:
         else:
             self.plan = plan
 
-        print(self.plan)
-
         if "name" not in self.plan:
             raise HoustonClientError(
                 "Sorry, this plan is not formatted correctly - must contain a name"
@@ -77,6 +80,9 @@ class Houston:
     def import_plan(cls, path: str) -> dict:
 
         plan = cls.load_plan(path)
+
+        # substitute environment variable names
+        plan = PlanTemplate(plan).safe_substitute(os.environ)
 
         if ".yaml" in path or ".yml" in path:
             import yaml
@@ -285,7 +291,7 @@ class Houston:
         those belonging to the current mission.
 
         :param string stage_name: name of a stage in the plan
-        :return collections.defaultdict: stage parameters as key value pairs
+        :return dict: stage parameters as key value pairs
         """
 
         this_stage = self.get_stage(stage_name)
@@ -294,14 +300,15 @@ class Houston:
 
         if 'params' in this_stage:
             params = this_stage['params']
-
+            if params is None:
+                params = dict()
         else:
             params = dict()
 
-        return defaultdict(lambda: None, params)
+        return params
 
     def get_service_from_stage_name(self, stage_name: str) -> Optional[dict]:
-        if 'services' not in self.plan:
+        if self.plan.get('services') is None:
             return None
 
         this_stage = self.get_stage(stage_name)

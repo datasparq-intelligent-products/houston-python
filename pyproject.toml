@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "houston-client"
+version = "1.2.dev0"
+authors = [
+  { name="James Watkinson", email="info@datasparq.ai" },
+  { name="Matt Simmons", email="info@datasparq.ai" },
+]
+description = "Houston Python Client"
+keywords = ["houston"]
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+dependencies = [
+  "requests>=2.18.0,<3.0.0dev",
+  "requests[security]>=2.18.0,<3.0.0dev",
+  "PyYAML",
+  "retry>=0.9.2,<1",
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/datasparq-intelligent-products/houston-python"
+
+
+[project.optional-dependencies]
+gcp = [
+  "google-cloud-secret-manager>=2.5",
+  "google-cloud-pubsub>=1.2",
+  "google-cloud-storage>=1.35",
+  "google-cloud-logging>=2",
+]
+azure = [
+  "azure-eventgrid>=1.2.0",
+  "azure-mgmt-eventgrid>=2.2.0",
+]
+
+

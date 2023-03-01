@@ -105,8 +105,7 @@ def execute_service(
         raise
 
     if wait_callback is not None:  # check if waiting is required
-        event['wait_params'] = func_res
-        wait(event, h, wait_callback=wait_callback, start_time=start,
+        wait(**event, client=h, wait_callback=wait_callback, wait_params=func_res, start_time=start,
              time_limit_seconds=time_limit_seconds, wait_interval_seconds=wait_interval_seconds)
         return func_res  # end
 
@@ -115,7 +114,7 @@ def execute_service(
     #
 
     res = h.end_stage(event['stage'], mission_id=event['mission_id'], ignore_dependencies=event['ignore_dependants'])
-    h.trigger_all(res['next'], mission_id=event['mission_id'])
+    h.trigger_all(res.get('next', []), mission_id=event['mission_id'])
     log.info(f"Finished {name}.")
 
     return func_res

@@ -1,4 +1,4 @@
-![Houston logo](https://storage.googleapis.com/gcs-callhouston-asset/houston-title.png)
+# Houston
 
 ![PyPI](https://img.shields.io/pypi/v/houston-client)
 
@@ -170,16 +170,4 @@ def main(event, context):
     """
     houston = GCPHouston(api_key="H...", plan="test-plan")
     houston.extract_stage_information(event["data"])
-```
-
-## Proxy
-
-Should you need to use a proxy for your Houston requests, please set them as an environment variable:
-
-```bash
-# windows
-set https_proxy=10.0.0.1 
-
-# linux
-export https_proxy=10.0.0.1
 ```

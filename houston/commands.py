@@ -31,7 +31,6 @@ def init_client(func):
                 plan = client.plan['name']
 
         try:
-
             if client is None:
                 try:
                     from houston.plugin.gcp import GCPHouston
@@ -127,7 +126,6 @@ def static_fire(plan: str, client: Houston, stage: str, **kwargs) -> bool:
 def save(plan: Union[str, dict], client: Houston, **kwargs) -> bool:
     """Save a plan or update an existing plan.
     """
-    client.delete_plan(safe=True)
     client.save_plan()
     log.info(f"Saved Plan '{client.plan['name']}' 🚀")
     return True  # end
@@ -253,8 +251,8 @@ def wait(plan: str, client: Houston, stage: str, mission_id: str, wait_callback:
                  f"Waiting for stage '{stage}' will continue in new invocation.")
 
         # start new function to continue waiting
-        event = dict(plan=plan, stage=stage, mission_id=mission_id, command=wait,
-                     wait_invocation_count=wait_invocation_count + 1)
+        event = dict(plan=plan, stage=stage, mission_id=mission_id, command="wait",
+                     wait_invocation_count=wait_invocation_count + 1, wait_params=wait_params)
         client.trigger(event)
 
         return True  # end

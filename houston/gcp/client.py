@@ -7,7 +7,7 @@ from houston.exceptions import HoustonServerError, HoustonServerBusy, HoustonPla
 from houston.gcp.secret_manager import get_secret
 from houston.gcp.cloud_storage import download_file_as_text
 from google.cloud import pubsub_v1
-from google.api_core.exceptions import GoogleAPIError
+from google.api_core.exceptions import GoogleAPIError, NotFound, InvalidArgument
 from retry import retry
 
 retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError, GoogleAPIError), tries=3, delay=1, backoff=100)
@@ -23,11 +23,19 @@ def pubsub_trigger(client: Houston, data: dict, topic=None):
                          set as a parameter for the stage as 'topic' or 'psq'.
     """
 
-    publisher_client = pubsub_v1.PublisherClient()
     if hasattr(client, 'project'):
         project = client.project
     else:
         project = os.getenv("GCP_PROJECT", os.getenv("PROJECT_ID", None))
+
+    if project is None or project.strip() == "":
+        raise ValueError(
+            "Project is not set. Specify a 'project' in the service's trigger, "
+            "or use GCPHouston.project = 'your-project-id', "
+            "or set 'GCP_PROJECT' environment variable"
+        )
+
+    publisher_client = pubsub_v1.PublisherClient()
 
     data, stage_params = client._validate_message_data(data)
 
@@ -35,13 +43,6 @@ def pubsub_trigger(client: Houston, data: dict, topic=None):
 
     if service is not None and service.get('trigger') is not None and service.get('trigger').get('project'):
         project = service.get('trigger').get('project')
-
-    if project is None:
-        raise ValueError(
-            "Project is not set. Specify a 'project' in the service's trigger, "
-            "or use GCPHouston.project = 'your-project-id', "
-            "or set 'GCP_PROJECT' environment variable"
-        )
 
     # try to find the topic name in the stage parameters
     if topic is None:
@@ -58,7 +59,15 @@ def pubsub_trigger(client: Houston, data: dict, topic=None):
                              "pubsub_trigger, or be a stage parameter with name 'topic' or 'psq'")
 
     future = publisher_client.publish(topic=f"projects/{project}/topics/{topic}", data=json.dumps(data).encode("utf-8"))
-    future.result()
+
+    try:
+        future.result()
+    except NotFound:
+        raise ValueError(f"Couldn't publish Pub/Sub message. This could be because the "
+                         f"GCP project '{project}' doesn't exist, or user does not have access to it.")
+    except InvalidArgument:
+        raise ValueError(f"Couldn't publish Pub/Sub message. This could be because the "
+                         f"GCP project ID '{project}' was formatted incorrectly.")
 
 
 class GCPHouston(Houston):
