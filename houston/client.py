@@ -1,13 +1,15 @@
 import json
 import os
 import logging
-from string import Template
-from typing import *
 import urllib.parse
+import yaml
+
 from retry import retry
-from houston.exceptions import HoustonClientError, HoustonException, HoustonServerBusy, \
-                               HoustonServerError, HoustonPlanNotFound
-from houston.interface import InterfaceRequest
+from typing import Union, Dict, List, Optional
+
+from .exceptions import HoustonClientError, HoustonException, HoustonServerBusy, HoustonServerError, HoustonPlanNotFound
+from .interface import InterfaceRequest
+from .plan import PlanTemplate
 
 
 HOUSTON_BASE_URL = os.getenv("HOUSTON_BASE_URL", "https://callhouston.io/api/v1")
@@ -16,22 +18,19 @@ retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError), tries=3,
 log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
 
 
-class PlanTemplate(Template):
-    idpattern = "(?a:unsafe_substitution)"
-    braceidpattern = "(?a:[_a-z][_a-z0-9]*)"
-
-
 class Houston:
 
-    def __init__(self, plan: Union[dict, str], api_key: str = None):
+    def __init__(self, plan: Union[dict, str], api_key: str = None, base_url: str = None):
         """
         :param plan: Can be either:
                         - string: name of an existing plan to be loaded
                         - dict: plan definition, see Plan docs for example
-                        If a plan definition is provided, ensure it is loaded with load_plan to make it
-                        available to other instances
-        :param api_key: Api key provided from https://callhouston.io, see account information. Can also be set as
-                        environment variable HOUSTON_KEY
+                     If a plan definition is provided, ensure it is saved with the `save_plan` method to make it
+                     available to other instances.
+        :param api_key: The API key corresponding to the account you wish to use.
+                        Can also be set as environment variable HOUSTON_KEY.
+        :param base_url: URL of the Houston server to be used. Can also be set as environment variable HOUSTON_BASE_URL.
+                         If none is set then "https://callhouston.io/api/v1" will be used.
         """
         if api_key is None:
             api_key = self._find_api_key()
@@ -42,7 +41,10 @@ class Houston:
 
         self.key = api_key
         self.interface_request = InterfaceRequest(key=api_key)
-        self.base_url = HOUSTON_BASE_URL
+
+        if base_url is None:
+            base_url = HOUSTON_BASE_URL
+        self.base_url = base_url
 
         # TODO: load mission instead of plan
         if isinstance(plan, str):
@@ -85,7 +87,6 @@ class Houston:
         plan = PlanTemplate(plan).safe_substitute(os.environ)
 
         if ".yaml" in path or ".yml" in path:
-            import yaml
             try:
                 plan = yaml.load(plan, Loader=yaml.SafeLoader)
             except yaml.YAMLError as e:
@@ -298,11 +299,8 @@ class Houston:
         if this_stage is None:
             return None
 
-        if 'params' in this_stage:
-            params = this_stage['params']
-            if params is None:
-                params = dict()
-        else:
+        params = this_stage.get('params', dict())
+        if params is None:
             params = dict()
 
         return params
@@ -374,7 +372,7 @@ class Houston:
 
         if service is None:
             raise ValueError(f"Cannot trigger stage '{stage}': no service is defined for this stage. "
-                             f"See https://callhouston.io/docs#services.")
+                             f"See https://callhouston.io/docs#services.")  # TODO: docs link
 
         url = service.get('trigger').get('url')
 
@@ -412,14 +410,14 @@ class Houston:
                 pubsub_trigger(self, data)
             except ImportError:
                 raise ImportError(f"Cannot use Pub/Sub to trigger stage because GCP plugin is not installed. "
-                                  f"Use: `pip install houston-client[gcp]`")
+                                  f"Use: `pip install \"houston-client[gcp]\"`")
         elif trigger_method == 'azure/event-grid' or trigger_method == 'event-grid' or trigger_method == 'eventgrid':
             try:
                 from houston.plugin.azure import event_grid_trigger
                 event_grid_trigger(self, data)
             except ImportError:
                 raise ImportError(f"Cannot use Event Grid trigger because Azure plugin is not installed."
-                                  f"Use: `pip install houston-client[azure]`")
+                                  f"Use: `pip install \"houston-client[azure]\"`")
 
         elif trigger_method == "http":
             self.http_trigger(data)  # TODO: get endpoint from services as well

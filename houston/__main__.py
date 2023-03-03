@@ -15,6 +15,8 @@ parser_start.add_argument('-s', '--stage', type=str,
                                'mission. Defaults to all stages with no upstream dependencies')
 parser_start.add_argument('-i', '--ignore', type=str,
                           help='(optional) Comma separated list of stage names that should be ignored for the mission')
+parser_start.add_argument('-sk', '--skip', type=str,
+                          help='(optional) Comma separated list of stage names that should be skipped for the mission')
 
 parser_save = commands.add_parser('save', description=save.__doc__)
 parser_save.add_argument('-p', '--plan', type=str, required=True,
@@ -28,11 +30,7 @@ parser_skip = commands.add_parser('skip', description=skip.__doc__)
 parser_skip.add_argument('-p', '--plan', type=str, required=True, help='Plan name')
 parser_skip.add_argument('-m', '--mission_id', type=str, required=True, help='Mission ID')
 parser_skip.add_argument('-s', '--stage', type=str, required=True,
-                         help='Comma separated list of stage names to be marked as completed without running')
-parser_skip.add_argument('-iup', '--ignore-dependencies', dest="ignore_dependencies", type=bool,
-                         help='If true, ignore upstream stages', default=False)
-parser_skip.add_argument('-idown', '--ignore-dependants', dest="ignore_dependants", type=bool,
-                         help='If true, ignore downstream stages', default=False)
+                         help='Comma separated list of stage names to be skipped')
 
 parser_ignore = commands.add_parser('ignore', description=ignore.__doc__)
 parser_ignore.add_argument('-p', '--plan', type=str, required=True, help='Plan name')

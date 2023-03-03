@@ -7,9 +7,9 @@ import json
 from typing import Optional, Callable
 from logging import getLogger, Logger
 
-from houston.client import Houston
-from houston.commands import run_command, wait, prepare_params
-from houston.exceptions import HoustonClientError
+from .client import Houston
+from .commands import run_command, wait, prepare_params
+from .exceptions import HoustonClientError
 
 
 def execute_service(
@@ -79,6 +79,11 @@ def execute_service(
     #
     # start stage
     #
+    if 'stage' not in event:
+        raise HoustonClientError("Event doesn't contain 'stage' attribute.")
+    if 'mission_id' not in event:
+        raise HoustonClientError("Event doesn't contain 'mission_id' attribute. "
+                                 "A stage can't be started without knowing which mission it belongs to.")
 
     try:
         h.start_stage(event['stage'], event['mission_id'], ignore_dependencies=event["ignore_dependencies"])

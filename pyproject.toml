@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "houston-client"
-version = "1.2.dev0"
+version = "1.2.0"
 authors = [
   { name="James Watkinson", email="info@datasparq.ai" },
   { name="Matt Simmons", email="info@datasparq.ai" },

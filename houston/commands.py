@@ -1,5 +1,5 @@
 """Commands are additional high-level methods to allow users or Houston integrated services to carry out common tasks
-with a single command. A Houston integrated service will a command when triggered with a message containing the
+with a single command. A Houston integrated service will run a command when triggered with a message containing the
 'command' attribute.
 """
 
@@ -8,8 +8,8 @@ import logging
 from functools import wraps
 
 from retry import retry
-from houston import Houston
-from houston.exceptions import HoustonException, HoustonClientError, HoustonPlanNotFound
+from .client import Houston
+from .exceptions import HoustonException, HoustonClientError, HoustonPlanNotFound
 from typing import *
 import time
 import json
@@ -58,7 +58,7 @@ def init_client(func):
 
 @init_client
 def start(plan: str, client: Houston, stages: Union[str, List[str]] = None, ignore: Union[str, List[str]] = None,
-          stage=None, **kwargs) -> bool:
+          stage=None, skip: Union[str, List[str]] = None, **kwargs) -> bool:
     """Start a new mission. Creates a new mission ID and then trigger the first stages or the requested stages.
     If the requested stages are not the first stages their upstream dependencies will be ignored.
     """
@@ -71,6 +71,15 @@ def start(plan: str, client: Houston, stages: Union[str, List[str]] = None, igno
         for s in ignore:
             try:
                 client.ignore_stage(s, mission_id)
+            except HoustonException:
+                pass
+
+    if skip is not None:
+        if isinstance(skip, str):
+            skip = [a.strip() for a in skip.split(",")]
+        for s in skip:
+            try:
+                client.skip_stage(s, mission_id)
             except HoustonException:
                 pass
 
@@ -142,16 +151,16 @@ def delete(plan: str, client: Houston, **kwargs) -> bool:
 
 @init_client
 def skip(plan: str, client: Houston, stage: str, mission_id: str, stages: Union[str, List[str]] = None,
-         ignore_dependencies: bool = False, ignore_dependants: bool = False,  **kwargs) -> bool:
-    """Start and end a stage without doing anything, essentially skipping it.
+         **kwargs) -> bool:
+    """Skip one or more stages. Skipped stages won't be run,
+    and the mission will continue as if these stages don't exist.
     """
     stages = stages if stages is not None else stage
     if isinstance(stages, str):
         stages = [a.strip() for a in stages.split(",")]
     for s in stages:
-        client.start_stage(stage_name=s, mission_id=mission_id, ignore_dependencies=ignore_dependencies)
-        client.end_stage(stage_name=s, mission_id=mission_id, ignore_dependencies=ignore_dependants)
-        log.info(f"Marked stage '{s}' as complete without running it.")
+        client.skip_stage(stage_name=s, mission_id=mission_id)
+        log.info(f"Marked stage '{s}' as skipped.")
     return True  # end
 
 
@@ -183,9 +192,6 @@ def wait(plan: str, client: Houston, stage: str, mission_id: str, wait_callback:
     This command is used by Houston services when a running a stage that takes longer than the service's
     execution time limit. If the service is going to run out of time it will trigger itself and continue waiting in a
     new invocation.
-
-    See the docs for examples of using this command:
-      - [Cloud Function](https://callhouston.io/docs/) # TODO: link to docs for how to use
 
     The triggering message can contain `wait_params` which will be used as parameters for the `wait_callback`. This
     command will trigger new runs a maximum of 500 times to prevent infinite loops. This can be changed with the

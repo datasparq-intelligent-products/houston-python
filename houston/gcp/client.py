@@ -49,9 +49,9 @@ def pubsub_trigger(client: Houston, data: dict, topic=None):
         if service is not None and 'trigger' in service:
             topic = service['trigger'].get('topic')
         elif stage_params:
-            if stage_params['topic']:
+            if stage_params.get('topic'):
                 topic = stage_params['topic']
-            elif stage_params['psq']:
+            elif stage_params.get('psq'):
                 topic = stage_params['psq']
 
         if topic is None:

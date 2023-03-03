@@ -73,7 +73,7 @@ def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION
 
         {"plan": "my-plan", "command": "start"}
 
-    For more examples and all other commands, see the docs:  # TODO: link to docs
+    For more examples and all other commands see: https://github.com/datasparq-intelligent-products/houston-python/blob/master/houston/commands.py
     """
 
     log.info(f"Creating Houston service '{name}' within {FUNCTION_NAME}.")

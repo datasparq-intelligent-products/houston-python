@@ -6,7 +6,7 @@ import logging
 import requests
 import os
 
-from houston.exceptions import HoustonServerBusy, HoustonClientError, HoustonServerError
+from .exceptions import HoustonServerBusy, HoustonClientError, HoustonServerError
 
 log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
 
@@ -25,7 +25,7 @@ class InterfaceRequest:
         :param string uri: Complete URL of request, including schema (e.g. https://)
         :param dict params: Parameters to be sent with request (will be json encoded)
         :param dict data: Parameters to be sent with request (will be form encoded)
-        :param int retry: Number of retry's to attempt with request (only used by 429 server responses)
+        :param int retry: Number of retries to attempt with request (only used by 429 server responses)
         :param bool safe: Do not raise errors in-case of client error
         :param bool fire_and_forget: If true, do not wait for a response
         :return: HTTP response code and response payload parsed as dict
@@ -61,7 +61,7 @@ class InterfaceRequest:
                 )
 
         if 400 <= response.status_code < 500 and not safe:
-            err_msg = self._parse_error(response)
+            err_msg, err_type = self._parse_error(response)
             raise HoustonClientError(
                 "Unknown client error occurred. Please check request"
                 if err_msg is None
@@ -72,7 +72,7 @@ class InterfaceRequest:
             return response.status_code, None
 
         if response.status_code >= 500:
-            err_msg = self._parse_error(response)
+            err_msg, err_type = self._parse_error(response)
             raise HoustonServerError(
                 "Unknown server error occurred. If this persists please contact support"
                 if err_msg is None
@@ -87,22 +87,25 @@ class InterfaceRequest:
         return response.status_code, json_data
 
     @staticmethod
-    def _parse_error(response):
+    def _parse_error(response) -> (str, str):
         """
         Parses any version of the API payload when the status code is != 200
 
         :param response: a response object
         :return: Error message
         """
-        if response.headers.get("Content-Type") == "application/json":
-            try:
-                payload = response.json()
-                if "msg" in payload:
-                    return payload["msg"]
-                elif "error" in payload and "message" in payload:
-                    return payload["error"] + ". " + payload["message"]
-                elif "error" in payload:
-                    return payload["error"]
-            except ValueError:
-                # Generic Error
-                return None
+        try:
+            payload = response.json()
+            if "msg" in payload:  # deprecated
+                return payload["msg"], None
+            elif "message" in payload and "type" in payload:
+                return payload.get("message"), payload.get("type")
+            elif "message" in payload:  # deprecated
+                return payload["message"], None
+            elif "error" in payload and "message" in payload:  # deprecated
+                return payload["error"] + ". " + payload["message"], None
+            elif "error" in payload:  # deprecated
+                return payload["error"], None
+        except ValueError:
+            # Generic Error
+            return None, None
