@@ -39,6 +39,7 @@ class InterfaceRequest:
             response = requests.request(
                 method, uri, headers=self.headers, params=params, data=data, timeout=timeout,
             )
+
         except requests.exceptions.ReadTimeout:
             if fire_and_forget:
                 return 200, dict()
@@ -92,20 +93,31 @@ class InterfaceRequest:
         Parses any version of the API payload when the status code is != 200
 
         :param response: a response object
-        :return: Error message
+        :return: Error message, error type
         """
+        err_msg = None
+        err_type = None
         try:
             payload = response.json()
             if "msg" in payload:  # deprecated
-                return payload["msg"], None
+                err_msg = payload["msg"]
+
             elif "message" in payload and "type" in payload:
-                return payload.get("message"), payload.get("type")
+                err_msg = payload.get("message")
+                err_type = payload.get("type")
             elif "message" in payload:  # deprecated
-                return payload["message"], None
+                err_msg = payload["message"]
             elif "error" in payload and "message" in payload:  # deprecated
-                return payload["error"] + ". " + payload["message"], None
+                err_msg = payload["error"] + ". " + payload["message"]
             elif "error" in payload:  # deprecated
-                return payload["error"], None
+                err_msg = payload["error"]
         except ValueError:
             # Generic Error
-            return None, None
+            pass
+
+        if response.status_code == 404 and err_msg is None:
+            err_msg = f"Resource not found at {response.request.url}."
+            if "api/v1" not in response.request.path_url:
+                err_msg += " The base URL may be incorrect; it should end with '/api/v1'"
+
+        return err_msg, err_type
