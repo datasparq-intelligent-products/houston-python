@@ -186,7 +186,7 @@ class Houston:
         """
 
         # Get mission definition before deletion to archive
-        mission_json = self.interface_request.request(
+        status_code, mission_json = self.interface_request.request(
             "get", uri=self.base_url + "/missions/" + mission_id
         )
 
