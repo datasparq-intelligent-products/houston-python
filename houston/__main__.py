@@ -25,6 +25,7 @@ parser_save.add_argument('-p', '--plan', type=str, required=True,
 
 parser_delete = commands.add_parser('delete', description=delete.__doc__)
 parser_delete.add_argument('-p', '--plan', type=str, required=True, help='Plan name')
+parser_delete.add_argument('-m', '--mission_id', type=str, required=False, help='Mission ID')
 
 parser_skip = commands.add_parser('skip', description=skip.__doc__)
 parser_skip.add_argument('-p', '--plan', type=str, required=True, help='Plan name')
