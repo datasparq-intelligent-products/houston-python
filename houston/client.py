@@ -185,21 +185,11 @@ class Houston:
         :return dict:
         """
 
-        # Get mission definition before deletion to archive
-        status_code, mission_json = self.interface_request.request(
-            "get", uri=self.base_url + "/missions/" + mission_id
-        )
-
         # Delete selected mission
         self.interface_request.request(
             "delete", uri=self.base_url + "/missions/" + mission_id, safe=safe
         )
 
-        # Save mission JSON to archive file
-        with open(f'archive_{mission_id}.json', 'w') as f:
-            json.dump(mission_json, f)
-
-        return mission_json
 
     @retry_wrapper
     def start_stage(self, stage_name, mission_id, retry=3, ignore_dependencies=False):
