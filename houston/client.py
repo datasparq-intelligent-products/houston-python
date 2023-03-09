@@ -163,6 +163,20 @@ class Houston:
         return response["id"]
 
     @retry_wrapper
+    def get_mission(self, mission_id: str):
+        """Get saved mission detail from Houston server
+
+        :param string mission_id: ID of mission to retrieve details of
+        :return dict: plan detail
+        """
+
+        status_code, response = self.interface_request.request(
+            "get", uri=self.base_url + "/missions/" + mission_id
+        )
+
+        return response
+
+    @retry_wrapper
     def delete_mission(self, mission_id, safe):
         """Deletes a mission given a mission id
 
@@ -172,7 +186,7 @@ class Houston:
         """
 
         # Get mission definition before deletion to archive
-        status_code, mission_json = self.interface_request.request(
+        mission_json = self.interface_request.request(
             "get", uri=self.base_url + "/missions/" + mission_id
         )
 
