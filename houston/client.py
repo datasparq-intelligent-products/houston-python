@@ -177,7 +177,7 @@ class Houston:
         return response
 
     @retry_wrapper
-    def delete_mission(self, mission_id, safe):
+    def delete_mission(self, mission_id, safe=True):
         """Deletes a mission given a mission id
 
         :param mission_id: unique identifier of mission requiring deletion
