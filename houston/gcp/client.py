@@ -8,39 +8,34 @@ from houston.gcp.secret_manager import get_secret
 from houston.gcp.cloud_storage import download_file_as_text
 from google.cloud import pubsub_v1
 from google.api_core.exceptions import GoogleAPIError, NotFound, InvalidArgument
+from google.auth import default
+from google.auth.exceptions import DefaultCredentialsError
 from retry import retry
 
-retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError, GoogleAPIError), tries=3, delay=1, backoff=100)
+try:
+    _, PROJECT_ID = default()
+except DefaultCredentialsError:
+    PROJECT_ID = None
+
+retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError, GoogleAPIError), tries=3, delay=1, backoff=2)
 
 
 @retry_wrapper
-def pubsub_trigger(client: Houston, data: dict, topic=None):
-    """Sends a message to the provided Pub/Sub topic with the provided data payload.
+def pubsub_trigger(client: Houston, data: dict, topic: str = None):
+    """Trigger used by any services that use the 'pubsub' trigger method.
+    Sends a message to the provided Pub/Sub topic with the provided data payload.
     :param client: Instance of the Houston client class
     :param data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
-                      additional JSON serializable information.
-    :param string topic: Google Pub/Sub topic name, e.g. 'topic-for-stage'. This can either be provided here or be
-                         set as a parameter for the stage as 'topic' or 'psq'.
+                 additional JSON serializable information.
+    :param topic: Google Pub/Sub topic name, e.g. 'topic-for-stage' (for a topic in the current GCP project), or full
+                  topic ID, e.g. 'projects/my-gcp-project/topics/topic-for-stage'. This can either be provided here,
+                  or taken from the stage's service.
     """
-
-    if hasattr(client, 'project'):
-        project = client.project
-    else:
-        project = os.getenv("GCP_PROJECT", os.getenv("PROJECT_ID", None))
-
-    if project is None or project.strip() == "":
-        raise ValueError(
-            "Project is not set. Specify a 'project' in the service's trigger, "
-            "or use GCPHouston.project = 'your-project-id', "
-            "or set 'GCP_PROJECT' environment variable"
-        )
-
-    publisher_client = pubsub_v1.PublisherClient()
 
     data, stage_params = client._validate_message_data(data)
 
     service = client.get_service_from_stage_name(data['stage'])
-
+    project = None
     if service is not None and service.get('trigger') is not None and service.get('trigger').get('project'):
         project = service.get('trigger').get('project')
 
@@ -58,22 +53,47 @@ def pubsub_trigger(client: Houston, data: dict, topic=None):
             raise ValueError("Pub/Sub topic name could not be determined. It can either be provided as an argument to "
                              "pubsub_trigger, or be a stage parameter with name 'topic' or 'psq'")
 
+    # check whether topic provided contains the project name, e.g. f"projects/{project}/topics/{topic}"
+    topic_sections = topic.split("/")
+    if len(topic_sections) == 4 and topic_sections[0] == "projects" and topic_sections[2] == "topics":
+        project = topic_sections[1]
+        topic = topic_sections[3]
+
+    # if the project has not been provided along with the topic then assume we are using the current project
+    if project is None:
+        if hasattr(client, 'project'):
+            project = client.project
+        else:
+            project = os.getenv("GCP_PROJECT", os.getenv("PROJECT_ID", None))
+
+    if project is None or project.strip() == "":
+        raise ValueError(
+            "Can't publish Pub/Sub message because project is not set. Specify a 'project' in the service's trigger, "
+            "or use GCPHouston.project = 'your-project-id', or set 'GCP_PROJECT' environment variable"
+        )
+
+    try:
+        publisher_client = pubsub_v1.PublisherClient()
+    except DefaultCredentialsError:
+        raise Exception("Couldn't create a Cloud Pub/Sub publisher client because default credentials could "
+                        "not be found. Use `gcloud auth application-default login` to create default credentials "
+                        "on a local machine.")
+
     future = publisher_client.publish(topic=f"projects/{project}/topics/{topic}", data=json.dumps(data).encode("utf-8"))
 
     try:
         future.result()
     except NotFound:
-        raise ValueError(f"Couldn't publish Pub/Sub message. This could be because the "
+        raise ValueError(f"Couldn't publish Pub/Sub message to topic '{topic}'. This could be because the "
                          f"GCP project '{project}' doesn't exist, or user does not have access to it.")
     except InvalidArgument:
-        raise ValueError(f"Couldn't publish Pub/Sub message. This could be because the "
+        raise ValueError(f"Couldn't publish Pub/Sub message to topic '{topic}'. This could be because the "
                          f"GCP project ID '{project}' was formatted incorrectly.")
 
 
 class GCPHouston(Houston):
 
-    project = os.getenv("GCP_PROJECT", os.getenv("PROJECT_ID", None))
-    topic = None
+    project = os.getenv("GCP_PROJECT", os.getenv("PROJECT_ID", PROJECT_ID))
 
     @staticmethod
     def load_plan(path):
@@ -98,8 +118,8 @@ class GCPHouston(Houston):
                 return get_secret(name=os.getenv('HOUSTON_KEY_SECRET_NAME', 'houston-key'), project=self.project)
             except ValueError:
                 raise ValueError("Houston API key could not be found in 'HOUSTON_KEY' environment variable and could "
-                                 "not be loaded from Google Cloud Secret Manager.")
-            # TODO: See the docs for alternative ways of supplying the API key: https://callhouston.io/docs/  # TODO: create docs and link to them here
+                                 "not be loaded from Google Cloud Secret Manager. See the docs for alternative ways of "
+                                 "supplying the API key: https://github.com/datasparq-ai/houston/blob/main/docs/gcp.md")
         return api_key
 
     def pubsub_trigger(self, data, topic=None):

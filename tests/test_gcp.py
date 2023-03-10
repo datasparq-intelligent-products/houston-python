@@ -1,12 +1,15 @@
 import time
 import unittest
 import sys
+import base64
+import json
 
 if sys.version_info >= (3, 3):
     from unittest import mock
 else:
     import mock
-from houston.plugin.gcp import GCPHouston
+from houston.gcp.client import GCPHouston
+from houston.gcp.cloud_function import service
 from tests.test_houston import MockResponse
 
 
@@ -31,9 +34,12 @@ class TestCallStageViaPubSub(unittest.TestCase):
 
     test_plan_description = {
         "name": "test",
+        "services": [
+            {"name": "mock-service", "trigger": {"method": "pubsub", "topic": "projects/foo/topics/bar"}}
+        ],
         "stages": [
             {"name": "start", "downstream": ["end"], "params": {"table": "test.sql"}},
-            {"name": "end", "params": {"table": "test.sql", "psq": "tp-test-end"}},
+            {"name": "end", "service": "mock-service", "params": {"table": "test.sql"}},
         ],
     }
 
@@ -48,7 +54,6 @@ class TestCallStageViaPubSub(unittest.TestCase):
                         "success": True,
                         "complete": False,
                         "next": ["end"],
-                        "params": {"end": {"table": "test.sql", "psq": "tp-test-end"}},
                     },
                 )
                 houston = GCPHouston(
@@ -56,7 +61,6 @@ class TestCallStageViaPubSub(unittest.TestCase):
                 )
                 response = houston.end_stage("start", "test-launch-id")
                 pubsub_client.return_value = MockPubSubResponse
-                houston.project = "test-gcp-project"
                 houston.trigger_all(response['next'], "test-launch-id")
 
     def test_pubsub_trigger(self):
@@ -70,7 +74,6 @@ class TestCallStageViaPubSub(unittest.TestCase):
                         "success": True,
                         "complete": False,
                         "next": ["end"],
-                        "params": {"end": {"table": "test.sql", "psq": "tp-test-end"}},
                     },
                 )
                 houston = GCPHouston(
@@ -78,11 +81,30 @@ class TestCallStageViaPubSub(unittest.TestCase):
                 )
                 response = houston.end_stage("start", "test-launch-id")
                 pubsub_client.return_value = MockPubSubResponse
-                houston.project = "test-gcp-project"
 
                 for next_stage in response['next']:
-                    topic = houston.get_params(next_stage)['psq']
-                    houston.pubsub_trigger({'stage': next_stage, 'mission_id': "test-launch-id"}, topic)
+                    houston.pubsub_trigger({'stage': next_stage, 'mission_id': "test-launch-id"})
+
+
+class TestCloudFunctionService(unittest.TestCase):
+
+    def test_create_cloud_function_service(self):
+        def cf_func(param1: str, param2: int, param3: dict):
+            # store
+            assert param1 == "foo"
+            assert param2 == 123
+            assert param3["a"] == "foo"
+            assert param3["b"] == 123
+
+        cloud_function = service(name="my cloud function")(cf_func)
+
+        params = dict(
+            param1="foo",
+            param2=123,
+            param3=dict(a="foo", b=123)
+        )
+
+        cloud_function(event=dict(data=base64.b64encode(json.dumps(params).encode("utf-8"))), context=None)
 
 
 if __name__ == "__main__":

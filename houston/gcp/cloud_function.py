@@ -10,23 +10,27 @@ from retry import retry
 from google.api_core.exceptions import GoogleAPIError
 from google.cloud import logging_v2 as cloud_logging
 from google.cloud.logging_v2.resource import Resource
+from google.auth.exceptions import DefaultCredentialsError
 
-from houston.gcp.client import GCPHouston
+from houston.gcp.client import GCPHouston, PROJECT_ID
 from houston.service import execute_service
 
 FUNCTION_NAME = os.getenv('FUNCTION_NAME', os.getenv('FUNCTION_TARGET', "houston-cloud-function"))
 
 log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "cloudfunctions.googleapis.com%2Fcloud-functions"))
-
-# set up logging for Google Cloud Function
-log_handler = cloud_logging.Client().get_default_handler(
-    resource=Resource(type="cloud_function", labels={
-        "function_name": FUNCTION_NAME,
-        "region": os.getenv('FUNCTION_REGION'),
-        "project_id": os.getenv('GCP_PROJECT')}))
-
 log.setLevel(os.getenv('LOG_LEVEL', 'INFO'))
-log.addHandler(log_handler)
+
+try:
+    # set up logging for Google Cloud Function
+    log_handler = cloud_logging.Client().get_default_handler(
+        resource=Resource(type="cloud_function", labels={
+            "function_name": FUNCTION_NAME,
+            "region": os.getenv('FUNCTION_REGION'),
+            "project_id": os.getenv('GCP_PROJECT', PROJECT_ID)}))
+    log.addHandler(log_handler)
+except DefaultCredentialsError:
+    pass
+
 
 retry_wrapper = retry((OSError, AttributeError, GoogleAPIError), tries=3, backoff=3, delay=3, logger=log)
 

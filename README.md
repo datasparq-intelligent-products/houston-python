@@ -2,8 +2,7 @@
 
 ![PyPI](https://img.shields.io/pypi/v/houston-client)
 
-Python Client for Houston (https://callhouston.io). 
-Houston is an open source tool for building low cost, scalable, platform-agnostic data pipelines. 
+Python Client for [Houston](https://callhouston.io), an open source tool for building low cost, scalable, platform-agnostic data pipelines. 
 Teams can share data processes as microservices using a simple API.
 
 

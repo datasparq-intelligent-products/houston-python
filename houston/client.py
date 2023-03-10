@@ -348,7 +348,7 @@ class Houston:
 
         params = self.get_params(stage)
         if params is None:
-            raise ValueError(f"Stage '{stage}' has no params. Cannot trigger a stage without the relevant params.")
+            params = dict()
 
         if 'plan' not in data:
             data['plan'] = self.plan['name']
@@ -372,7 +372,7 @@ class Houston:
 
         if service is None:
             raise ValueError(f"Cannot trigger stage '{stage}': no service is defined for this stage. "
-                             f"See https://callhouston.io/docs#services.")  # TODO: docs link
+                             f"See: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
 
         url = service.get('trigger').get('url')
 
@@ -420,7 +420,7 @@ class Houston:
                                   f"Use: `pip install \"houston-client[azure]\"`")
 
         elif trigger_method == "http":
-            self.http_trigger(data)  # TODO: get endpoint from services as well
+            self.http_trigger(data)
 
         else:
             raise ValueError(f"Trigger method '{trigger_method}' is not recognised. "

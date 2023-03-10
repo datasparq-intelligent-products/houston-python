@@ -28,7 +28,7 @@ from retry import retry
 import uuid
 
 
-retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError, HttpOperationError), tries=3, delay=1, backoff=100)
+retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError, HttpOperationError), tries=3, delay=1, backoff=2)
 
 
 @retry_wrapper
