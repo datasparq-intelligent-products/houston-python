@@ -151,7 +151,6 @@ def delete(plan: str, client: Houston, mission_id: str = None, **kwargs) -> bool
         mission_json = client.get_mission(mission_id)
         client.delete_mission(mission_id, safe=True)
         print(mission_json)
-        log.info(f"Deleted Mission with ID: '{mission_id}'.")
 
     else:
         client.delete_plan(safe=True)
