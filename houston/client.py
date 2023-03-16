@@ -141,6 +141,7 @@ class Houston:
         status_code, response = self.interface_request.request(
             "get", uri=self.base_url + "/plans/" + plan_name
         )
+
         return response
 
     @retry_wrapper
@@ -159,6 +160,35 @@ class Houston:
             )
 
         return response["id"]
+
+    @retry_wrapper
+    def get_mission(self, mission_id: str):
+        """Get saved mission detail from Houston server
+
+        :param string mission_id: ID of mission to retrieve details of
+        :return dict: plan detail
+        """
+
+        status_code, response = self.interface_request.request(
+            "get", uri=self.base_url + "/missions/" + mission_id
+        )
+
+        return response
+
+    @retry_wrapper
+    def delete_mission(self, mission_id, safe=True):
+        """Deletes a mission given a mission id
+
+        :param mission_id: unique identifier of mission requiring deletion
+        :param boolean safe: Ignore exception raised by invalid request i.e. plan doesn't exist, True = ignore
+        :return dict:
+        """
+
+        # Delete selected mission
+        self.interface_request.request(
+            "delete", uri=self.base_url + "/missions/" + mission_id, safe=safe
+        )
+
 
     @retry_wrapper
     def start_stage(self, stage_name, mission_id, retry=3, ignore_dependencies=False):

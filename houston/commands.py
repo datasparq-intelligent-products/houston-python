@@ -141,11 +141,21 @@ def save(plan: Union[str, dict], client: Houston, **kwargs) -> bool:
 
 
 @init_client
-def delete(plan: str, client: Houston, **kwargs) -> bool:
-    """Delete a plan.
+def delete(plan: str, client: Houston, mission_id: str = None, **kwargs) -> bool:
+    """Delete a plan or mission.
     """
-    client.delete_plan(safe=True)
-    log.info(f"Deleted Plan '{client.plan['name']}'.")
+
+    if mission_id is not None:
+
+        # Get mission and delete
+        mission_json = client.get_mission(mission_id)
+        client.delete_mission(mission_id, safe=True)
+        print(mission_json)
+
+    else:
+        client.delete_plan(safe=True)
+        log.info(f"Deleted Plan '{client.plan['name']}'.")
+
     return True  # end
 
 
