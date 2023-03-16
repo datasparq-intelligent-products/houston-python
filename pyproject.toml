@@ -28,8 +28,9 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/datasparq-intelligent-products/houston-python"
-
+"Homepage" = "https://github.com/datasparq-ai/houston"
+"Documentation" = "https://github.com/datasparq-ai/houston/blob/main/docs"
+"Source" = "https://github.com/datasparq-intelligent-products/houston-python"
 
 [project.optional-dependencies]
 gcp = [
