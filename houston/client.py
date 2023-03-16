@@ -13,7 +13,7 @@ from .plan import PlanTemplate
 
 HOUSTON_BASE_URL = os.getenv("HOUSTON_BASE_URL", "https://callhouston.io/api/v1")
 
-retry_wrapper = retry((HoustonServerError, HoustonServerBusy, OSError), tries=3, delay=1, backoff=100)
+retry_wrapper = retry((HoustonServerBusy, OSError), tries=3, delay=1, backoff=100)
 log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
 
 
@@ -430,7 +430,7 @@ class Houston:
             trigger_method = 'google/pubsub'
         else:
             raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the "
-                             "stage definition. See docs: callhouston.io/docs#services")
+                             "stage definition. See docs: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
 
         if trigger_method == 'google/pubsub' or trigger_method == 'pubsub':
             try:
