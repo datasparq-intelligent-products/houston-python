@@ -1,7 +1,6 @@
 import json
 import os
 import logging
-import urllib.parse
 import yaml
 
 from retry import retry
@@ -357,8 +356,8 @@ class Houston:
 
     @retry_wrapper
     def http_trigger(self, data: dict):
-        """Trigger a stage of the plan via HTTP GET request. The contents of `data` will be passed as URL query
-        parameters. The service specified for the stage is expected to have a trigger with method 'http' and a value for
+        """Trigger a stage of the plan via HTTP POST request. The contents of `data` will be passed as the request body.
+        The service specified for the stage is expected to have a trigger with method 'http' and a value for
         'url'. The request will be made without waiting for the result to ensure that the process that makes the request
         can end without the next stage needing to finish.
         :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
@@ -376,11 +375,10 @@ class Houston:
 
         url = service.get('trigger').get('url')
 
-        query = urllib.parse.urlencode(data, doseq=False)  # convert content to url query
-
         self.interface_request.request(
-            "GET",
-            uri=f"{url}?{query}",
+            "POST",
+            uri=f"{url}",
+            data=json.dumps(data),
             fire_and_forget=True,
         )
 
@@ -435,6 +433,8 @@ class Houston:
         :param ignore_dependencies: If true, all stages will be triggered with instructions to ignore upstream dependencies
         :param ignore_dependants: If true, all stages will be triggered with instructions to upstream downstream stages
         """
+        if stages is None:
+            return
         for stage in stages:
             self.trigger(dict(stage=stage, mission_id=mission_id, plan=self.plan['name'],
                               ignore_dependencies=ignore_dependencies, ignore_dependants=ignore_dependants, **kwargs))
