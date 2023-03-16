@@ -24,7 +24,14 @@ pip install "houston-client[gcp]"
 
 To get started in under 15 minutes, see the quickstart repo: https://github.com/datasparq-intelligent-products/houston-quickstart-python 
 
-Full documentation is available at https://callhouston.io/docs
+This client has the following uses:
+- Saving, updating, and deleting plans: see [save command](https://github.com/datasparq-ai/houston/blob/main/docs/commands.md#save), [delete command](https://github.com/datasparq-ai/houston/blob/main/docs/commands.md#delete)
+- Starting missions: see [start command](https://github.com/datasparq-ai/houston/blob/main/docs/commands.md#start)
+- Creating Houston microservices:
+  - With Google Cloud Functions, see [Cloud Function Service Decorator](houston/gcp/cloud_function.py), [Google Cloud](https://github.com/datasparq-ai/houston/blob/main/docs/google_cloud.md), and [Python Quickstart GCP](https://github.com/datasparq-intelligent-products/houston-quickstart-python/tree/master/google-cloud)
+  - With any service: see https://github.com/datasparq-ai/houston/blob/main/docs/services.md, and [service.py](houston/service.py)
+
+Full documentation is available at [github.com/datasparq-ai/houston](https://github.com/datasparq-ai/houston/tree/main/docs)
 
 
 ## Requirements

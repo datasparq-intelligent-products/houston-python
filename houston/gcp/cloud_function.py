@@ -37,7 +37,12 @@ retry_wrapper = retry((OSError, AttributeError, GoogleAPIError), tries=3, backof
 
 def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION_TIMEOUT_SEC', 300),
             wait_callback: Optional[Callable[..., bool]] = None, wait_interval_seconds: int = 10):
-    """Wrapper to convert any Python function to a Houston service that can be executed by a Google Cloud Function
+    """
+    For full documentation, see:
+    - https://github.com/datasparq-ai/houston/blob/main/docs/services.md
+    - https://github.com/datasparq-ai/houston/blob/main/docs/google_cloud.md
+
+    Wrapper to convert any Python function to a Houston service that can be executed by a Google Cloud Function
     using a Pub/Sub trigger. Example usage:
 
         # main.py
@@ -53,7 +58,7 @@ def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION
         gcloud functions deploy my-function-name --runtime python39 --trigger-topic my-function-topic \
           --source . --entry-point main --timeout 540 --set-env-vars GCP_PROJECT=my-project-id
 
-    Note: this also requires a requirements.txt to be present, which must contain houston-client>2
+    Note: this also requires a requirements.txt to be present, which must contain houston-client[gcp].
 
     The function can then execute stages, provided the Pub/Sub topic name is provided in the stage params in your plan.
     A message like the following would trigger it to run a stage:
@@ -77,7 +82,7 @@ def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION
 
         {"plan": "my-plan", "command": "start"}
 
-    For more examples and all other commands see: https://github.com/datasparq-intelligent-products/houston-python/blob/master/houston/commands.py
+    For more examples and all other commands see: https://github.com/datasparq-ai/houston/blob/main/docs/commands.md
     """
 
     log.info(f"Creating Houston service '{name}' within {FUNCTION_NAME}.")

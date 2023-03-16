@@ -119,7 +119,7 @@ class GCPHouston(Houston):
             except ValueError:
                 raise ValueError("Houston API key could not be found in 'HOUSTON_KEY' environment variable and could "
                                  "not be loaded from Google Cloud Secret Manager. See the docs for alternative ways of "
-                                 "supplying the API key: https://github.com/datasparq-ai/houston/blob/main/docs/gcp.md")
+                                 "supplying the API key: https://github.com/datasparq-ai/houston/blob/main/docs/google_cloud.md#providing-the-api-key")
         return api_key
 
     def pubsub_trigger(self, data, topic=None):
