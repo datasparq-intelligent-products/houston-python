@@ -23,3 +23,9 @@ class HoustonServerError(HoustonException):
     """Error raised when Houston server has issues"""
 
     pass
+
+
+class HoustonPlanNotFound(ValueError):
+    """Error raised when Houston plan does not exist as a saved plan or local file"""
+
+    pass

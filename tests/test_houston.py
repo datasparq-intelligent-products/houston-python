@@ -93,7 +93,7 @@ class TestStage(unittest.TestCase):
 
         params = houston.get_params("start")
         self.assertEqual(params['table'], "test.sql")
-        self.assertIs(params['notaparam'], None)
+        self.assertIs(params.get('notaparam'), None)
 
         not_params = houston.get_params("notastage")
         self.assertIs(not_params, None)
