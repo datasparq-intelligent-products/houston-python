@@ -21,12 +21,12 @@ class InterfaceRequest:
         """
         Request a Houston resource
 
-        :param string method: Http method required for request (e.g. GET, POST, DELETE etc)
+        :param string method: Http method required for request (e.g. GET, POST, DELETE etc.)
         :param string uri: Complete URL of request, including schema (e.g. https://)
         :param dict params: Parameters to be sent with request (will be json encoded)
         :param dict data: Parameters to be sent with request (will be form encoded)
         :param int retry: Number of retries to attempt with request (only used by 429 server responses)
-        :param bool safe: Do not raise errors in-case of client error
+        :param bool safe: Do not raise errors in case of client error
         :param bool fire_and_forget: If true, do not wait for a response
         :return: HTTP response code and response payload parsed as dict
         """
@@ -55,7 +55,8 @@ class InterfaceRequest:
         if response.status_code in (429, 572):
             if retry > 0:
                 time.sleep(random())
-                self.request(method, uri, params, data, retry - 1)
+                response.status_code, json_data = self.request(method, uri, params, data, retry - 1)
+                return response.status_code, json_data
             else:
                 raise HoustonServerBusy(
                     "received too many 429 responses from server, please reduce the number of requests"
