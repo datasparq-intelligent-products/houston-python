@@ -1,6 +1,8 @@
 """Commands are additional high-level methods to allow users or Houston integrated services to carry out common tasks
 with a single command. A Houston integrated service will run a command when triggered with a message containing the
 'command' attribute.
+
+Full documentation https://github.com/datasparq-ai/houston/blob/main/docs/commands.md
 """
 
 import os
@@ -142,7 +144,9 @@ def save(plan: Union[str, dict], client: Houston, **kwargs) -> bool:
 
 @init_client
 def delete(plan: str, client: Houston, mission_id: str = None, **kwargs) -> bool:
-    """Delete a plan or mission.
+    """Delete a plan or mission. If a mission ID is provided then only the mission will be deleted.
+    When a plan is deleted, every mission that belonged to that plan is also deleted, even if the
+    mission is currently in progress.
     """
 
     if mission_id is not None:
@@ -305,6 +309,7 @@ def run_command(command_name: str, plan: str = None, client: Houston = None, *ar
         missionstart=start,
         missionsequencestart=start,
         ignore=ignore,
+        exclude=ignore,
         scrub=scrub,
         staticfire=static_fire,
         save=save,

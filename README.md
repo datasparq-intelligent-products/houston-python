@@ -5,6 +5,7 @@
 Python Client for [Houston](https://callhouston.io), an open source tool for building low cost, scalable, platform-agnostic data pipelines. 
 Teams can share data processes as microservices using a simple API.
 
+Documentation: [github.com/datasparq-ai/houston/docs](https://github.com/datasparq-ai/houston/blob/main/docs)
 
 ## Installation
 

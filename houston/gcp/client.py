@@ -122,18 +122,19 @@ class GCPHouston(Houston):
                                  "supplying the API key: https://github.com/datasparq-ai/houston/blob/main/docs/google_cloud.md#providing-the-api-key")
         return api_key
 
-    def pubsub_trigger(self, data, topic=None):
+    def pubsub_trigger(self, data: dict, topic: str = None):
         """Sends a message to the provided Pub/Sub topic with the provided data payload.
+        Full documentation https://github.com/datasparq-ai/houston/blob/main/docs/services.md#trigger-methods
 
-        :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
-                          additional JSON serializable information.
-        :param string topic: Google Pub/Sub topic name, e.g. 'topic-for-stage'. This can either be provided here or be
-                             set as a parameter for the stage as 'topic' or 'psq'.
+        :param data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
+                     additional JSON serializable information.
+        :param topic: Google Pub/Sub topic name, e.g. 'topic-for-stage'. This can either be provided here or be
+                      set as a parameter for the stage as 'topic' or 'psq'.
         """
         return pubsub_trigger(self, data, topic)
 
     @staticmethod
-    def extract_stage_information(data) -> dict:
+    def extract_stage_information(data: str) -> dict:
         """Static method to extract stage information from sent PubSub message"""
         e = json.loads(base64.b64decode(data))
 

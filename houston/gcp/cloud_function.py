@@ -1,4 +1,4 @@
-"""Utilities to integrate a Google Cloud Function with Houston
+"""Utilities to integrate a Google Cloud Functions with Houston
 """
 
 import os

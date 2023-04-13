@@ -45,7 +45,7 @@ def event_grid_trigger(client, data):
     service = client.get_service_from_stage_name(stage)
     if service is None:
         raise ValueError(f"Cannot trigger stage '{stage}': no service is defined for this stage. "
-                         f"See https://callhouston.io/docs#services.")
+                         f"See https://github.com/datasparq-ai/houston/blob/main/docs/services.md.")
 
     trigger = service.get('trigger')
     topic = trigger.get('topic')
@@ -58,6 +58,7 @@ class AzureHouston(Houston):
 
     def event_grid_trigger(self, data, topic, topic_key):
         """Sends a message to the provided Event Grid topic with the provided data payload.
+        Full documentation https://github.com/datasparq-ai/houston/blob/main/docs/services.md#trigger-methods
 
         :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
                           additional JSON serializable information.
