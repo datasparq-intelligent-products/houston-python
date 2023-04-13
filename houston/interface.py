@@ -46,17 +46,20 @@ class InterfaceRequest:
             else:
                 raise
         except requests.exceptions.ConnectionError:
-            raise HoustonServerError(
-                f"Unable to connect to Houston API server at url: {uri}. Is your Houston server running?"
-            )
+            if retry > 0:
+                time.sleep(random())
+                return self.request(method, uri, params, data, retry - 1)
+            else:
+                raise HoustonServerError(
+                    f"Unable to connect to Houston API server at url: {uri}. Is your Houston server running?"
+                )
 
         # retry if server busy - this can be common in a large workflow due to operations being immutable. 572 is the
         # Houston API's code for DagLockedError. 429 is 'Too Many Requests'.
         if response.status_code in (429, 572):
             if retry > 0:
                 time.sleep(random())
-                response.status_code, json_data = self.request(method, uri, params, data, retry - 1)
-                return response.status_code, json_data
+                return self.request(method, uri, params, data, retry - 1)
             else:
                 raise HoustonServerBusy(
                     "received too many 429 responses from server, please reduce the number of requests"
