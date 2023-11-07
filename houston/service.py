@@ -16,6 +16,7 @@ def execute_service(
         event: dict,
         func: Callable,
         name: str = "unnamed",
+        auth: Optional[dict] = None,
         time_limit_seconds: int = 300,
         wait_callback: Optional[Callable[..., bool]] = None,
         wait_interval_seconds: int = 10,
@@ -24,14 +25,22 @@ def execute_service(
 ):
     """Executes a Houston stage or Houston command based on the event provided.
 
-    :param event:
-    :param func:
-    :param log: Logger to use
-    :param name:
-    :param time_limit_seconds:
-    :param wait_callback:
-    :param wait_interval_seconds:
-    :param client_cls: The Houston client class to use, i.e. Houston, GCPHouston, or AzureHouston.
+    :param event: Dictionary containing the arguments to this service. Could contain commands, mission arguments (for
+                  running a stage in a mission), or arguments to `func` (for running without Houston). For more
+                  information, see https://github.com/datasparq-ai/houston/blob/main/docs/services.md
+    :param func: Function to execute. It can take any arguments contained within `event`.
+    :param name: (optional) Friendly name for the service.
+    :param auth: (optional) Map of service name to authentication parameters. See
+                            https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md for
+                            details on how to provide authentication for each type of authenticated trigger.
+    :param time_limit_seconds: (optional) Maximum time the function can run for in a single invocation of the service.
+    :param wait_callback: (optional)  When running the 'wait' command, this function will be used to check whether the
+                          stage is finished or still running. It should return true or false. It can take any arguments
+                          returned by `func`.
+    :param wait_interval_seconds: (optional) When running the 'wait' command, the time to wait between running the wait
+                                             callback.
+    :param log: (optional) Logger to use.
+    :param client_cls: (optional) The Houston client class to use, i.e. Houston, GCPHouston, or AzureHouston.
     :return:
     """
     start = time.time()  # start time of the service used by wait callback
@@ -60,7 +69,7 @@ def execute_service(
 
     log.info(f"Initialising Houston client for plan '{event['plan']}'.")
 
-    h = client_cls(plan=event['plan'])
+    h = client_cls(plan=event['plan'], auth=auth)
 
     #
     # houston commands
@@ -79,6 +88,7 @@ def execute_service(
     #
     # start stage
     #
+
     if 'stage' not in event:
         raise HoustonClientError("Event doesn't contain 'stage' attribute.")
     if 'mission_id' not in event:

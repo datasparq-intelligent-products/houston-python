@@ -5,6 +5,7 @@ from random import random
 import logging
 import requests
 import os
+from typing import Optional
 
 from .exceptions import HoustonServerBusy, HoustonClientError, HoustonServerError
 
@@ -17,27 +18,31 @@ class InterfaceRequest:
     def __init__(self, key):
         self.headers = {"x-access-key": key, "Content-Type": "application/json"}
 
-    def request(self, method, uri, params=None, data=None, retry=3, safe=False, fire_and_forget=False):
+    def request(self, method: str, uri: str, params: Optional[dict] = None, data: Optional[dict] = None, retry: int = 3,
+                safe: bool = False, fire_and_forget: bool = False, headers: Optional[dict] = None):
         """
         Request a Houston resource
 
-        :param string method: Http method required for request (e.g. GET, POST, DELETE etc.)
-        :param string uri: Complete URL of request, including schema (e.g. https://)
-        :param dict params: Parameters to be sent with request (will be json encoded)
-        :param dict data: Parameters to be sent with request (will be form encoded)
-        :param int retry: Number of retries to attempt with request (only used by 429 server responses)
-        :param bool safe: Do not raise errors in case of client error
-        :param bool fire_and_forget: If true, do not wait for a response
+        :param method: Http method required for request (e.g. GET, POST, DELETE etc.)
+        :param uri: Complete URL of request, including schema (e.g. https://)
+        :param params: Parameters to be sent with request (will be json encoded)
+        :param data: Parameters to be sent with request (will be form encoded)
+        :param retry: Number of retries to attempt with request (only used by 429 server responses)
+        :param safe: Do not raise errors in case of client error
+        :param fire_and_forget: If true, do not wait for a response
+        :param headers: (optional) Additional headers to be sent with request
         :return: HTTP response code and response payload parsed as dict
         """
 
         timeout = None
         if fire_and_forget:
             timeout = 1
+        if headers is None:
+            headers = {}
 
         try:
             response = requests.request(
-                method, uri, headers=self.headers, params=params, data=data, timeout=timeout,
+                method, uri, headers={**self.headers, **headers}, params=params, data=data, timeout=timeout,
             )
 
         except requests.exceptions.ReadTimeout:
@@ -48,7 +53,8 @@ class InterfaceRequest:
         except requests.exceptions.ConnectionError:
             if retry > 0:
                 time.sleep(random())
-                return self.request(method, uri, params, data, retry - 1)
+                return self.request(method, uri, params, data, retry - 1,
+                                    fire_and_forget=fire_and_forget, headers=headers)
             else:
                 raise HoustonServerError(
                     f"Unable to connect to Houston API server at url: {uri}. Is your Houston server running?"
@@ -59,7 +65,8 @@ class InterfaceRequest:
         if response.status_code in (429, 572):
             if retry > 0:
                 time.sleep(random())
-                return self.request(method, uri, params, data, retry - 1)
+                return self.request(method, uri, params, data, retry - 1,
+                                    fire_and_forget=fire_and_forget, headers=headers)
             else:
                 raise HoustonServerBusy(
                     "received too many 429 responses from server, please reduce the number of requests"

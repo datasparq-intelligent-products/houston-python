@@ -19,17 +19,23 @@ log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
 
 class Houston:
 
-    def __init__(self, plan: Union[dict, str], api_key: str = None, base_url: str = None):
+    def __init__(self, plan: Union[dict, str], api_key: str = None, base_url: str = None, auth: Optional[dict] = None):
         """
         :param plan: Can be either:
                         - string: name of an existing plan to be loaded
+                        - string: local file path to a YAML or JSON file containing a plan definition
                         - dict: plan definition, see Plan docs for example
                      If a plan definition is provided, ensure it is saved with the `save_plan` method to make it
                      available to other instances.
         :param api_key: The API key corresponding to the account you wish to use.
                         Can also be set as environment variable HOUSTON_KEY.
         :param base_url: URL of the Houston server to be used. Can also be set as environment variable HOUSTON_BASE_URL.
-                         If none is set then "https://callhouston.io/api/v1" will be used.
+                         If none is set then "https://callhouston.io/api/v1" will be used. The base URL can also be
+                         provided within the `api_key` (or the HOUSTON_KEY environment variable) with the format:
+                         '{base URL}/key/{key ID}', e.g. 'https://houston.example.com/api/v1/key/abc123'.
+        :param auth: (optional) Map of service name to authentication parameters. See
+                     https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md for
+                     details on how to provide authentication for each type of authenticated trigger.
         """
         if api_key is None:
             api_key = self._find_api_key()
@@ -38,6 +44,14 @@ class Houston:
             raise ValueError("No API key was found. Provide 'api_key' parameter or set the 'HOUSTON_KEY' environment "
                              "variable.")
 
+        if str.startswith(api_key, "http://") or str.startswith(api_key, "https://"):
+            split_key = api_key.split("/key/")
+            if len(split_key) != 2:
+                raise ValueError("Key has an invalid format. Expected format: '{base URL}/key/{key ID}'.")
+
+            base_url = split_key[0]
+            api_key = split_key[1]
+
         self.key = api_key
         self.interface_request = InterfaceRequest(key=api_key)
 
@@ -45,7 +59,12 @@ class Houston:
             base_url = HOUSTON_BASE_URL
         self.base_url = base_url
 
-        # TODO: load mission instead of plan
+        if auth is None:
+            self.auth = {}
+        else:
+            self.auth = auth
+
+        # TODO: load mission as well - get stage params from mission, not plan
         if isinstance(plan, str):
             try:
                 self.plan = self.get_plan(plan)  # look for existing saved plan
@@ -220,7 +239,7 @@ class Houston:
         :param string stage_name: name of stage which has finished
         :param string mission_id: unique identifier of mission currently being completed
         :param int retry: number of retry attempts
-        :param bool ignore_dependencies: if set to True, all downstream stages dependant on this stage will be ignored,
+        :param bool ignore_dependencies: if set to True, all downstream stages dependent on this stage will be ignored,
                                          effectively ending the mission early
         :returns dict: Houston response {"next": list(string), "complete": bool, "params": dict(stage_name: dict())}
                        params contains multiple stage's parameters stored by stage name as keys
@@ -390,6 +409,7 @@ class Houston:
         The service specified for the stage is expected to have a trigger with method 'http' and a value for
         'url'. The request will be made without waiting for the result to ensure that the process that makes the request
         can end without the next stage needing to finish.
+
         :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
                           additional JSON serializable information.
         """
@@ -403,12 +423,53 @@ class Houston:
             raise ValueError(f"Cannot trigger stage '{stage}': no service is defined for this stage. "
                              f"See: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
 
+        if service.get('trigger') is None:
+            raise ValueError(f"Cannot trigger stage '{stage}': no trigger is defined for this stage's service "
+                             f"'{service.get('name')}'. "
+                             f"See: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
+
+        headers = {}
+
+        service_auth_requirement = service.get('trigger').get('auth')
+
+        if service_auth_requirement is not None:
+
+            no_auth_error_msg = (f"Cannot trigger stage '{stage}': this stage's service "
+                                 f"'{service.get('name')}' requires authentication, but none was provided when the "
+                                 f"client was initialised. Provide an object like "
+                                 f"'{{\"{service.get('name')}\": {{\"token\": \"foobar123\"}}}}' to "
+                                 f"the `auth` parameter of any service that needs to be able to trigger it. "
+                                 f"See: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
+
+            if self.auth is None:
+                raise ValueError(no_auth_error_msg)
+
+            if service_auth_requirement.lower() == "bearer":
+                auth = self.auth.get(service.get('name'))
+                if auth is None:
+                    raise ValueError(no_auth_error_msg)
+                token = auth.get('token')
+                if token is None or token == "":
+                    raise ValueError(f"Cannot trigger stage '{stage}': this stage's service '{service.get('name')}' "
+                                     f"requires Bearer authentication and no token was provided. Provide an object "
+                                     f"like '{{\"{service.get('name')}\": {{\"token\": \"foobar123\"}}}}' to "
+                                     f"the `auth` parameter. "
+                                     f"See: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
+
+                headers = {"Authorization": "Bearer " + token}
+
+            else:
+                raise ValueError(f"Cannot trigger stage '{stage}': this stage's service '{service.get('name')}' "
+                                 f"requires {service_auth_requirement} authentication, but this is not one of the "
+                                 f"supported authentication types. Use one of: 'Bearer'.")
+
         url = service.get('trigger').get('url')
 
         self.interface_request.request(
             "POST",
             uri=f"{url}",
             data=json.dumps(data),
+            headers=headers,
             fire_and_forget=True,
         )
 
@@ -429,8 +490,8 @@ class Houston:
         elif any([p in params for p in ('psq', 'topic')]):
             trigger_method = 'google/pubsub'
         else:
-            raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the "
-                             "stage definition. See docs: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
+            raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the stage "
+                             "definition. See docs: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
 
         if trigger_method == 'google/pubsub' or trigger_method == 'pubsub':
             try:
