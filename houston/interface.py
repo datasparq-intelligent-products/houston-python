@@ -18,15 +18,14 @@ class InterfaceRequest:
     def __init__(self, key):
         self.headers = {"x-access-key": key, "Content-Type": "application/json"}
 
-    def request(self, method: str, uri: str, params: Optional[dict] = None, data: Optional[dict] = None, retry: int = 3,
+    def request(self, method: str, uri: str, data: Optional[str] = None, retry: int = 3,
                 safe: bool = False, fire_and_forget: bool = False, headers: Optional[dict] = None):
         """
         Request a Houston resource
 
         :param method: Http method required for request (e.g. GET, POST, DELETE etc.)
         :param uri: Complete URL of request, including schema (e.g. https://)
-        :param params: Parameters to be sent with request (will be json encoded)
-        :param data: Parameters to be sent with request (will be form encoded)
+        :param data: Text to send in the body of the request (will be JSON encoded)
         :param retry: Number of retries to attempt with request (only used by 429 server responses)
         :param safe: Do not raise errors in case of client error
         :param fire_and_forget: If true, do not wait for a response
@@ -42,7 +41,7 @@ class InterfaceRequest:
 
         try:
             response = requests.request(
-                method, uri, headers={**self.headers, **headers}, params=params, data=data, timeout=timeout,
+                method, uri, headers={**self.headers, **headers}, data=data, timeout=timeout,
             )
 
         except requests.exceptions.ReadTimeout:
@@ -53,7 +52,7 @@ class InterfaceRequest:
         except requests.exceptions.ConnectionError:
             if retry > 0:
                 time.sleep(random())
-                return self.request(method, uri, params, data, retry - 1,
+                return self.request(method, uri, data, retry - 1,
                                     fire_and_forget=fire_and_forget, headers=headers)
             else:
                 raise HoustonServerError(
@@ -65,7 +64,7 @@ class InterfaceRequest:
         if response.status_code in (429, 572):
             if retry > 0:
                 time.sleep(random())
-                return self.request(method, uri, params, data, retry - 1,
+                return self.request(method, uri, data, retry - 1,
                                     fire_and_forget=fire_and_forget, headers=headers)
             else:
                 raise HoustonServerBusy(

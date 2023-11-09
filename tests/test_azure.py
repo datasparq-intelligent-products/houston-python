@@ -47,7 +47,7 @@ class TestEventGrid(unittest.TestCase):
                 event_grid_client.return_value = MockEventGridResponse
 
                 for next_stage in response['next']:
-                    params = houston.get_params(next_stage)
+                    params = houston.get_params(next_stage, mission_id="test-launch-id")
                     houston.event_grid_trigger({'stage': next_stage, 'mission_id': "test-launch-id"},
                                                topic=params['topic'], topic_key=params['topic_key'])
 

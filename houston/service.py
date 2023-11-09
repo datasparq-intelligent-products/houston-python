@@ -107,7 +107,7 @@ def execute_service(
     # run operation
     #
 
-    params = prepare_params(h.get_params(event['stage']), func, houston_context=event)
+    params = prepare_params(h.get_params(event['stage'], mission_id=event['mission_id']), func, houston_context=event)
     log.info(f"Loaded stage params: {params}")
 
     try:
