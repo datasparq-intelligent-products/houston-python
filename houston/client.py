@@ -163,7 +163,7 @@ class Houston:
         return response
 
     @retry_wrapper
-    def create_mission(self):
+    def create_mission(self) -> str:
         """Creates a new instance of a mission
         :return string: new mission instance id or False if error
         """
