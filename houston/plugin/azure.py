@@ -56,16 +56,14 @@ def event_grid_trigger(client, data):
 
 class AzureHouston(Houston):
 
-    def event_grid_trigger(self, data, topic, topic_key):
+    def event_grid_trigger(self, data):
         """Sends a message to the provided Event Grid topic with the provided data payload.
         Full documentation https://github.com/datasparq-ai/houston/blob/main/docs/services.md#trigger-methods
 
         :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
                           additional JSON serializable information.
-        :param string topic: The host name of the topic, e.g. 'topic1.westus2-1.eventgrid.azure.net'
-        :param string topic_key: A 44 character access key for the topic.
         """
-        event_grid_trigger(self, data, topic, topic_key)
+        event_grid_trigger(self, data)
 
 
 def publish_event_grid_event(data, topic_hostname, topic_key):

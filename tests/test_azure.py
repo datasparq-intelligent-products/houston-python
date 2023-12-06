@@ -7,7 +7,9 @@ if sys.version_info >= (3, 3):
 else:
     import mock
 from houston.plugin.azure import AzureHouston
-from tests.test_houston import MockResponse
+
+from . import mock_mission_data
+from .test_houston import MockResponse
 
 
 class MockEventGridResponse:
@@ -20,13 +22,20 @@ class TestEventGrid(unittest.TestCase):
 
     test_plan_description = {
         "name": "test",
+        "services": [{
+            "name": "azure-functon",
+            "trigger": {"method": "eventgrid", "topic": "tp-test-end", "topic_key": "abc"}
+        }],
         "stages": [
-            {"name": "start", "downstream": ["end"], "params": {"table": "test.sql"}},
-            {"name": "end", "params": {"table": "test.sql", "topic": "tp-test-end", "topic_key": "abc"}},  # note: it is not recommeneded to keep keys in stage params
+            {"name": "start", "service": "azure-functon", "downstream": ["end"], "params": {"table": "test.sql"}},
+            {"name": "end", "service": "azure-functon", "params": {"table": "test.sql", "topic": "tp-test-end", "topic_key": "abc"}},  # note: it is not recommeneded to keep keys in stage params
         ],
     }
 
     def test_event_grid_trigger(self):
+        # this tests that the Azure client can automatically determine that the stage's service uses event grid trigger
+        # and finds the trigger topic
+
         with mock.patch(
             "houston.plugin.azure.EventGridClient"
         ) as event_grid_client:
@@ -46,10 +55,15 @@ class TestEventGrid(unittest.TestCase):
                 response = houston.end_stage("start", "test-launch-id")
                 event_grid_client.return_value = MockEventGridResponse
 
+            with mock.patch("houston.interface.requests.request") as http:
+                # mock response for GET /mission/test-launch-id
+                http.return_value = MockResponse(
+                    status_code=200,
+                    json_data=mock_mission_data,
+                )
                 for next_stage in response['next']:
                     params = houston.get_params(next_stage, mission_id="test-launch-id")
-                    houston.event_grid_trigger({'stage': next_stage, 'mission_id': "test-launch-id"},
-                                               topic=params['topic'], topic_key=params['topic_key'])
+                    houston.trigger({'stage': next_stage, 'mission_id': "test-launch-id"})
 
 
 if __name__ == "__main__":

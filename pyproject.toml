@@ -40,7 +40,7 @@ gcp = [
   "google-cloud-logging>=2",
 ]
 azure = [
-  "azure-eventgrid>=1.2.0",
+  "azure-eventgrid>=1.2.0,<2",
   "azure-mgmt-eventgrid>=2.2.0",
 ]
 

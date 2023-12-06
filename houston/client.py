@@ -374,7 +374,7 @@ class Houston:
         :return dict: stage parameters as key value pairs
         """
         if mission_id is not None:
-            this_stage = Mission(self.get_mission(mission_id)).get_stage(stage_name)
+            this_stage = self.get_mission(mission_id).get_stage(stage_name)
             if this_stage is None:
                 return None
             return this_stage.params
