@@ -31,14 +31,13 @@ def execute_service(
     :param func: Function to execute. It can take any arguments contained within `event`.
     :param name: (optional) Friendly name for the service.
     :param auth: (optional) Map of service name to authentication parameters. See
-                            https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md for
-                            details on how to provide authentication for each type of authenticated trigger.
+                 https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md for
+                 details on how to provide authentication for each type of authenticated trigger.
     :param time_limit_seconds: (optional) Maximum time the function can run for in a single invocation of the service.
     :param wait_callback: (optional)  When running the 'wait' command, this function will be used to check whether the
                           stage is finished or still running. It should return true or false. It can take any arguments
                           returned by `func`.
-    :param wait_interval_seconds: (optional) When running the 'wait' command, the time to wait between running the wait
-                                             callback.
+    :param wait_interval_seconds: (optional) For the 'wait' command, the time to wait between running the wait callback.
     :param log: (optional) Logger to use.
     :param client_cls: (optional) The Houston client class to use, i.e. Houston, GCPHouston, or AzureHouston.
     :return:
@@ -90,13 +89,13 @@ def execute_service(
     #
 
     if 'stage' not in event:
-        raise HoustonClientError("Event doesn't contain 'stage' attribute.")
+        raise HoustonClientError("Event doesn't contain 'stage' attribute. Can't start a stage.")
     if 'mission_id' not in event:
         raise HoustonClientError("Event doesn't contain 'mission_id' attribute. "
                                  "A stage can't be started without knowing which mission it belongs to.")
 
     try:
-        h.start_stage(event['stage'], event['mission_id'], ignore_dependencies=event["ignore_dependencies"])
+        h.start_stage(event['stage'], event['mission_id'], ignore_dependencies=event.get("ignore_dependencies", False))
     except HoustonClientError:
         log.info("Stage has already started - stopping")
         return
@@ -128,8 +127,11 @@ def execute_service(
     # end stage
     #
 
-    res = h.end_stage(event['stage'], mission_id=event['mission_id'], ignore_dependencies=event['ignore_dependants'])
+    res = h.end_stage(event['stage'], mission_id=event['mission_id'],
+                      ignore_dependencies=event.get('ignore_dependants', False))
+
     h.trigger_all(res.get('next', []), mission_id=event['mission_id'])
+
     log.info(f"Finished {name}.")
 
     return func_res

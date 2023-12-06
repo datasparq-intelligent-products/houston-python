@@ -180,18 +180,51 @@ class Houston:
         return response["id"]
 
     @retry_wrapper
-    def get_mission(self, mission_id: str) -> dict:
+    def list_missions(self) -> List[str]:
+        """Get all active (non archived) missions for the selected plan.
+        :return: List of mission IDs
+        """
+
+        status_code, response = self.interface_request.request(
+            "get", uri=self.base_url + f"/plans/{self.plan['name']}/missions"
+        )
+
+        return response
+
+    @retry_wrapper
+    def list_completed_missions(self) -> List[str]:
+        """Get all completed (but not yet archived) missions associated with this key. These missions will also be in
+        the list returned by `Houston.list_missions()`. Completed missions are eligible to be archived automatically
+        by the API.
+        :return: List of mission IDs
+        """
+
+        status_code, response = self.interface_request.request(
+            "get", uri=self.base_url + f"/completed"
+        )
+
+        return response
+
+    def list_missions_in_progress(self) -> List[str]:
+        """Get all missions for the selected plan that are not completed. A mission is completed when all stages have
+        are finished, excluded, or skipped. This method exists as an alternative to querying every mission individually.
+        :return: List of mission IDs
+        """
+        return list(set(self.list_missions()) - set(self.list_completed_missions()))
+
+    @retry_wrapper
+    def get_mission(self, mission_id: str) -> Mission:
         """Get saved mission detail from Houston server
 
-        :param string mission_id: ID of mission to retrieve details of
-        :return dict: plan detail
+        :param mission_id: ID of mission to retrieve details of
+        :return: plan detail
         """
 
         status_code, response = self.interface_request.request(
             "get", uri=self.base_url + "/missions/" + mission_id
         )
 
-        return response
+        return Mission(data=response)
 
     @retry_wrapper
     def delete_mission(self, mission_id, safe=True):
