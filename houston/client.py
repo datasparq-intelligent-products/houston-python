@@ -365,8 +365,10 @@ class Houston:
         return filtered_stages[0]
 
     def get_params(self, stage_name: str, mission_id: Optional[str] = None) -> Optional[dict]:
-        """Returns the parameters for the provided stage name as defined in the plan, or the current mission of
-        mission_id is provided. Returns `None` if the stage doesn't exist.
+        """Returns the parameters for the provided stage name as defined in the plan, or the current mission if
+        mission_id is provided. Returns `None` if the stage doesn't exist. Mission parameters will also be included in
+        the return value if the mission_id is provided.
+        Note: Any mission parameter that shares a name with a stage parameter will be overwritten by it.
         Note: params are returned in their raw form, i.e. not JSON parsed.
 
         :param stage_name: name of a stage in the plan
@@ -374,10 +376,14 @@ class Houston:
         :return dict: stage parameters as key value pairs
         """
         if mission_id is not None:
-            this_stage = self.get_mission(mission_id).get_stage(stage_name)
+            mission = self.get_mission(mission_id)
+            mission_params = mission.params
+            this_stage = mission.get_stage(stage_name)
             if this_stage is None:
                 return None
-            return this_stage.params
+
+            mission_params.update(this_stage.params)
+            return mission_params
 
         else:
             # get stage params from plan
