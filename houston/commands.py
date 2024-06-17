@@ -152,9 +152,9 @@ def delete(plan: str, client: Houston, mission_id: str = None, **kwargs) -> bool
     if mission_id is not None:
 
         # Get mission and delete
-        mission_json = client.get_mission(mission_id)
+        mission = client.get_mission(mission_id)
         client.delete_mission(mission_id, safe=True)
-        print(mission_json)
+        print(json.dumps(mission.raw))
 
     else:
         client.delete_plan(safe=True)

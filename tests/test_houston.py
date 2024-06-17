@@ -66,6 +66,26 @@ class TestPlan(unittest.TestCase):
             houston.delete_plan(safe=True)
 
 
+class TestClient(unittest.TestCase):
+    test_plan = {"name": "test", "stages": [{"name": "start"}]}
+
+    def test_initialise_with_key(self):
+        houston = Houston(api_key="foobar1234", base_url="http://localhost:8000/api/v1", plan=self.test_plan)
+        assert houston.key == "foobar1234"
+        assert houston.base_url == "http://localhost:8000/api/v1"
+
+    def test_use_uri_key(self):
+        houston = Houston(api_key="http://localhost:8000/api/v1/key/foobar1234", plan=self.test_plan)
+        assert houston.key == "foobar1234"
+        assert houston.base_url == "http://localhost:8000/api/v1"
+
+    def test_use_invalid_uri_key_error(self):
+        with mock.patch("houston.interface.requests.request") as http:
+            http.return_value = MockResponse(status_code=500, json_data={"error": ""})
+            with self.assertRaises(ValueError):
+                Houston(api_key="http://localhost:8000/api/v1/foobar1234", plan=self.test_plan)
+
+
 class TestStage(unittest.TestCase):
     test_plan_description = {
         "name": "test",

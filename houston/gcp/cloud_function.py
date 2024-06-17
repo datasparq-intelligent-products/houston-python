@@ -35,7 +35,7 @@ except DefaultCredentialsError:
 retry_wrapper = retry((OSError, AttributeError, GoogleAPIError), tries=3, backoff=3, delay=3, logger=log)
 
 
-def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION_TIMEOUT_SEC', 300),
+def service(name: str = "unnamed", auth=None, time_limit_seconds: int = os.getenv('FUNCTION_TIMEOUT_SEC', 300),
             wait_callback: Optional[Callable[..., bool]] = None, wait_interval_seconds: int = 10):
     """
     For full documentation, see:
@@ -68,11 +68,18 @@ def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION
     The stage parameters will be provided to the wrapped function as they are defined in the plan. For example, the
     stage config for the above example function could look like the following:
 
-        name: my-stage
-        params:
-          topic: my-function-topic
-          param_1: "foo"
-          param_2: 123
+        - name: my-stage
+          params:
+            service: my-function
+            param_1: "foo"
+            param_2: 123
+
+    There must also be a service definition in the plan. For the example function above, it could look like this:
+
+        - name: my-function
+          trigger:
+            method: pubsub
+            topic: my-function-topicn  # this tells the houston client how to trigger the service
 
     Messages can also contain Houston commands, e.g. a message like the following would save/update a plan.
 
@@ -100,6 +107,7 @@ def service(name: str = "unnamed", time_limit_seconds: int = os.getenv('FUNCTION
             res = execute_service(name=name,
                                   func=retry_wrapper(func),
                                   event=e,
+                                  auth=auth,
                                   wait_callback=wait_callback,
                                   time_limit_seconds=time_limit_seconds,
                                   wait_interval_seconds=wait_interval_seconds,

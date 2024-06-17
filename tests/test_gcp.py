@@ -12,6 +12,8 @@ from houston.gcp.client import GCPHouston
 from houston.gcp.cloud_function import service
 from tests.test_houston import MockResponse
 
+from . import mock_mission_data
+
 
 class MockFuture:
     """Mock PubSub future object"""
@@ -61,6 +63,13 @@ class TestCallStageViaPubSub(unittest.TestCase):
                 )
                 response = houston.end_stage("start", "test-launch-id")
                 pubsub_client.return_value = MockPubSubResponse
+
+            with mock.patch("houston.interface.requests.request") as http:
+                # mock response for GET /mission/test-launch-id
+                http.return_value = MockResponse(
+                    status_code=200,
+                    json_data=mock_mission_data,
+                )
                 houston.trigger_all(response['next'], "test-launch-id")
 
     def test_pubsub_trigger(self):
@@ -82,6 +91,12 @@ class TestCallStageViaPubSub(unittest.TestCase):
                 response = houston.end_stage("start", "test-launch-id")
                 pubsub_client.return_value = MockPubSubResponse
 
+            with mock.patch("houston.interface.requests.request") as http:
+                # mock response for GET /mission/test-launch-id
+                http.return_value = MockResponse(
+                    status_code=200,
+                    json_data=mock_mission_data,
+                )
                 for next_stage in response['next']:
                     houston.pubsub_trigger({'stage': next_stage, 'mission_id': "test-launch-id"})
 

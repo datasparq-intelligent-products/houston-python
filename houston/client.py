@@ -9,7 +9,7 @@ from typing import Union, Dict, List, Optional
 from .exceptions import HoustonClientError, HoustonException, HoustonServerBusy, HoustonServerError, HoustonPlanNotFound
 from .interface import InterfaceRequest
 from .plan import PlanTemplate
-
+from .mission import Mission
 
 HOUSTON_BASE_URL = os.getenv("HOUSTON_BASE_URL", "https://callhouston.io/api/v1")
 
@@ -19,17 +19,23 @@ log = logging.getLogger(os.getenv('HOUSTON_LOG_NAME', "houston"))
 
 class Houston:
 
-    def __init__(self, plan: Union[dict, str], api_key: str = None, base_url: str = None):
+    def __init__(self, plan: Union[dict, str], api_key: str = None, base_url: str = None, auth: Optional[dict] = None):
         """
         :param plan: Can be either:
                         - string: name of an existing plan to be loaded
+                        - string: local file path to a YAML or JSON file containing a plan definition
                         - dict: plan definition, see Plan docs for example
                      If a plan definition is provided, ensure it is saved with the `save_plan` method to make it
                      available to other instances.
         :param api_key: The API key corresponding to the account you wish to use.
                         Can also be set as environment variable HOUSTON_KEY.
         :param base_url: URL of the Houston server to be used. Can also be set as environment variable HOUSTON_BASE_URL.
-                         If none is set then "https://callhouston.io/api/v1" will be used.
+                         If none is set then "https://callhouston.io/api/v1" will be used. The base URL can also be
+                         provided within the `api_key` (or the HOUSTON_KEY environment variable) with the format:
+                         '{base URL}/key/{key ID}', e.g. 'https://houston.example.com/api/v1/key/abc123'.
+        :param auth: (optional) Map of service name to authentication parameters. See
+                     https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md for
+                     details on how to provide authentication for each type of authenticated trigger.
         """
         if api_key is None:
             api_key = self._find_api_key()
@@ -38,6 +44,14 @@ class Houston:
             raise ValueError("No API key was found. Provide 'api_key' parameter or set the 'HOUSTON_KEY' environment "
                              "variable.")
 
+        if str.startswith(api_key, "http://") or str.startswith(api_key, "https://"):
+            split_key = api_key.split("/key/")
+            if len(split_key) != 2:
+                raise ValueError("Key has an invalid format. Expected format: '{base URL}/key/{key ID}'.")
+
+            base_url = split_key[0]
+            api_key = split_key[1]
+
         self.key = api_key
         self.interface_request = InterfaceRequest(key=api_key)
 
@@ -45,7 +59,11 @@ class Houston:
             base_url = HOUSTON_BASE_URL
         self.base_url = base_url
 
-        # TODO: load mission instead of plan
+        if auth is None:
+            self.auth = {}
+        else:
+            self.auth = auth
+
         if isinstance(plan, str):
             try:
                 self.plan = self.get_plan(plan)  # look for existing saved plan
@@ -145,7 +163,7 @@ class Houston:
         return response
 
     @retry_wrapper
-    def create_mission(self):
+    def create_mission(self) -> str:
         """Creates a new instance of a mission
         :return string: new mission instance id or False if error
         """
@@ -162,18 +180,51 @@ class Houston:
         return response["id"]
 
     @retry_wrapper
-    def get_mission(self, mission_id: str):
+    def list_missions(self) -> List[str]:
+        """Get all active (non archived) missions for the selected plan.
+        :return: List of mission IDs
+        """
+
+        status_code, response = self.interface_request.request(
+            "get", uri=self.base_url + f"/plans/{self.plan['name']}/missions"
+        )
+
+        return response
+
+    @retry_wrapper
+    def list_completed_missions(self) -> List[str]:
+        """Get all completed (but not yet archived) missions associated with this key. These missions will also be in
+        the list returned by `Houston.list_missions()`. Completed missions are eligible to be archived automatically
+        by the API.
+        :return: List of mission IDs
+        """
+
+        status_code, response = self.interface_request.request(
+            "get", uri=self.base_url + f"/completed"
+        )
+
+        return response
+
+    def list_missions_in_progress(self) -> List[str]:
+        """Get all missions for the selected plan that are not completed. A mission is completed when all stages have
+        are finished, excluded, or skipped. This method exists as an alternative to querying every mission individually.
+        :return: List of mission IDs
+        """
+        return list(set(self.list_missions()) - set(self.list_completed_missions()))
+
+    @retry_wrapper
+    def get_mission(self, mission_id: str) -> Mission:
         """Get saved mission detail from Houston server
 
-        :param string mission_id: ID of mission to retrieve details of
-        :return dict: plan detail
+        :param mission_id: ID of mission to retrieve details of
+        :return: plan detail
         """
 
         status_code, response = self.interface_request.request(
             "get", uri=self.base_url + "/missions/" + mission_id
         )
 
-        return response
+        return Mission(data=response)
 
     @retry_wrapper
     def delete_mission(self, mission_id, safe=True):
@@ -188,7 +239,6 @@ class Houston:
         self.interface_request.request(
             "delete", uri=self.base_url + "/missions/" + mission_id, safe=safe
         )
-
 
     @retry_wrapper
     def start_stage(self, stage_name, mission_id, retry=3, ignore_dependencies=False):
@@ -220,7 +270,7 @@ class Houston:
         :param string stage_name: name of stage which has finished
         :param string mission_id: unique identifier of mission currently being completed
         :param int retry: number of retry attempts
-        :param bool ignore_dependencies: if set to True, all downstream stages dependant on this stage will be ignored,
+        :param bool ignore_dependencies: if set to True, all downstream stages dependent on this stage will be ignored,
                                          effectively ending the mission early
         :returns dict: Houston response {"next": list(string), "complete": bool, "params": dict(stage_name: dict())}
                        params contains multiple stage's parameters stored by stage name as keys
@@ -314,25 +364,38 @@ class Houston:
 
         return filtered_stages[0]
 
-    def get_params(self, stage_name: str) -> Optional[dict]:
-        """Returns the parameters for the provided stage name as defined in the plan. Returns `None` if the stage
-        doesn't exist. Note: The plan used to retrieve parameters is the latest version and is not linked to any
-        particular mission ID, it is therefore possible for parameter values returned from this method to differ from
-        those belonging to the current mission.
+    def get_params(self, stage_name: str, mission_id: Optional[str] = None) -> Optional[dict]:
+        """Returns the parameters for the provided stage name as defined in the plan, or the current mission if
+        mission_id is provided. Returns `None` if the stage doesn't exist. Mission parameters will also be included in
+        the return value if the mission_id is provided.
+        Note: Any mission parameter that shares a name with a stage parameter will be overwritten by it.
+        Note: params are returned in their raw form, i.e. not JSON parsed.
 
-        :param string stage_name: name of a stage in the plan
+        :param stage_name: name of a stage in the plan
+        :param mission_id: Mission from which to read the stage parameters. If not provided, the plan will be used.
         :return dict: stage parameters as key value pairs
         """
+        if mission_id is not None:
+            mission = self.get_mission(mission_id)
+            mission_params = mission.params
+            this_stage = mission.get_stage(stage_name)
+            if this_stage is None:
+                return None
 
-        this_stage = self.get_stage(stage_name)
-        if this_stage is None:
-            return None
+            mission_params.update(this_stage.params)
+            return mission_params
 
-        params = this_stage.get('params', dict())
-        if params is None:
-            params = dict()
+        else:
+            # get stage params from plan
+            this_stage = self.get_stage(stage_name)
+            if this_stage is None:
+                return None
 
-        return params
+            params = this_stage.get('params', dict())
+            if params is None:
+                params = dict()
+
+            return params
 
     def get_service_from_stage_name(self, stage_name: str) -> Optional[dict]:
         if self.plan.get('services') is None:
@@ -375,7 +438,7 @@ class Houston:
         if not isinstance(stage, str):
             raise ValueError(f"Triggering message has an invalid value for 'stage'. Expected string, got '{stage}'")
 
-        params = self.get_params(stage)
+        params = self.get_params(stage, mission_id=data.get("mission_id"))
         if params is None:
             params = dict()
 
@@ -390,6 +453,9 @@ class Houston:
         The service specified for the stage is expected to have a trigger with method 'http' and a value for
         'url'. The request will be made without waiting for the result to ensure that the process that makes the request
         can end without the next stage needing to finish.
+
+        For more information see: https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md
+
         :param dict data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
                           additional JSON serializable information.
         """
@@ -403,12 +469,56 @@ class Houston:
             raise ValueError(f"Cannot trigger stage '{stage}': no service is defined for this stage. "
                              f"See: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
 
+        if service.get('trigger') is None:
+            raise ValueError(f"Cannot trigger stage '{stage}': no trigger is defined for this stage's service "
+                             f"'{service.get('name')}'. "
+                             f"See: https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md")
+
+        headers = {}
+
+        service_auth_requirement = service.get('trigger').get('auth')
+
+        if service_auth_requirement is not None:
+
+            no_auth_error_msg = (f"Cannot trigger stage '{stage}': this stage's service "
+                                 f"'{service.get('name')}' requires authentication, but none was provided when the "
+                                 f"client was initialised. Provide an object like "
+                                 f"'{{\"{service.get('name', 'my_service')}\": {{\"token\": \"foobar123\"}}}}' to "
+                                 f"the `auth` parameter of any service that needs to be able to trigger it. "
+                                 f"See: https://github.com/datasparq-ai/houston/blob/main/docs/service_trigger_methods.md")
+
+            if self.auth is None:
+                raise ValueError(no_auth_error_msg)
+
+            auth = self.auth.get(service.get('name'))
+
+            if auth is None:
+                raise ValueError(no_auth_error_msg)
+
+            if service_auth_requirement.lower() == "bearer":
+
+                token = auth.get('token')
+                if token is None or token == "":
+                    raise ValueError(f"Cannot trigger stage '{stage}': this stage's service '{service.get('name')}' "
+                                     f"requires Bearer authentication and no token was provided. Provide an object "
+                                     f"like '{{\"{service.get('name', 'my_service')}\": {{\"token\": \"foobar12\"}}}}' "
+                                     f"to the `auth` parameter. "
+                                     f"See: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
+
+                headers = {"Authorization": "Bearer " + token}
+
+            else:
+                raise ValueError(f"Cannot trigger stage '{stage}': this stage's service '{service.get('name')}' "
+                                 f"requires {service_auth_requirement} authentication, but this is not one of the "
+                                 f"supported authentication types. Use one of: 'Bearer'.")
+
         url = service.get('trigger').get('url')
 
         self.interface_request.request(
             "POST",
             uri=f"{url}",
             data=json.dumps(data),
+            headers=headers,
             fire_and_forget=True,
         )
 
@@ -429,8 +539,8 @@ class Houston:
         elif any([p in params for p in ('psq', 'topic')]):
             trigger_method = 'google/pubsub'
         else:
-            raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the "
-                             "stage definition. See docs: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
+            raise ValueError("Couldn't find a way to trigger the stage. Add the required information to the stage "
+                             "definition. See docs: https://github.com/datasparq-ai/houston/blob/main/docs/services.md")
 
         if trigger_method == 'google/pubsub' or trigger_method == 'pubsub':
             try:
@@ -447,7 +557,7 @@ class Houston:
                 raise ImportError(f"Cannot use Event Grid trigger because Azure plugin is not installed."
                                   f"Use: `pip install \"houston-client[azure]\"`")
 
-        elif trigger_method == "http":
+        elif trigger_method == "http" or trigger_method == "https":
             self.http_trigger(data)
 
         else:

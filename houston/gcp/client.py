@@ -28,7 +28,7 @@ def pubsub_trigger(client: Houston, data: dict, topic: str = None):
     :param data: content of the message to be sent. Should contain 'stage' and 'mission_id'. Can contain any
                  additional JSON serializable information.
     :param topic: Google Pub/Sub topic name, e.g. 'topic-for-stage' (for a topic in the current GCP project), or full
-                  topic ID, e.g. 'projects/my-gcp-project/topics/topic-for-stage'. This can either be provided here,
+                  topic ID, e.g. 'projects/my-gcp-project/topics/topic-for-service'. This can either be provided here,
                   or taken from the stage's service.
     """
 
